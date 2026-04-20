@@ -1060,7 +1060,7 @@ function IssueChatUserMessage({ message }: { message: ThreadMessage }) {
     userProfileMap,
   });
   const authorAvatar = (
-    <Avatar size="sm" className="mt-1 shrink-0">
+    <Avatar size="sm" className="shrink-0">
       {avatarUrl ? <AvatarImage src={avatarUrl} alt={resolvedAuthorName} /> : null}
       <AvatarFallback>{initialsForName(resolvedAuthorName)}</AvatarFallback>
     </Avatar>
@@ -1248,7 +1248,7 @@ function IssueChatAssistantMessage({ message }: { message: ThreadMessage }) {
   return (
     <div id={anchorId}>
       <div className="flex items-start gap-2.5 py-1.5">
-        <Avatar size="sm" className="mt-0.5 shrink-0">
+        <Avatar size="sm" className="shrink-0">
           {agentIcon ? (
             <AvatarFallback><AgentIcon icon={agentIcon} className="h-3.5 w-3.5" /></AvatarFallback>
           ) : (
