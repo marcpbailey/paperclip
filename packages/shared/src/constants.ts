@@ -68,6 +68,8 @@ export const AGENT_ROLE_LABELS: Record<AgentRole, string> = {
 
 export const AGENT_DEFAULT_MAX_CONCURRENT_RUNS = 5;
 
+export const WORKSPACE_BRANCH_ROUTINE_VARIABLE = "workspaceBranch";
+
 export const AGENT_ICON_NAMES = [
   "bot",
   "cpu",

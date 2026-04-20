@@ -270,6 +270,16 @@ export function applyPersistedExecutionWorkspaceConfig(input: {
     } else if (input.workspaceConfig?.workspaceRuntime) {
       nextConfig.workspaceRuntime = { ...input.workspaceConfig.workspaceRuntime };
     }
+    if (input.workspaceConfig?.desiredState === null) {
+      delete nextConfig.desiredState;
+    } else if (input.workspaceConfig?.desiredState) {
+      nextConfig.desiredState = input.workspaceConfig.desiredState;
+    }
+    if (input.workspaceConfig?.serviceStates === null) {
+      delete nextConfig.serviceStates;
+    } else if (input.workspaceConfig?.serviceStates) {
+      nextConfig.serviceStates = { ...input.workspaceConfig.serviceStates };
+    }
   }
 
   if (input.workspaceConfig && input.mode === "isolated_workspace") {
@@ -328,6 +338,22 @@ function buildExecutionWorkspaceConfigSnapshot(config: Record<string, unknown>):
   if ("workspaceRuntime" in config) {
     const workspaceRuntime = parseObject(config.workspaceRuntime);
     snapshot.workspaceRuntime = Object.keys(workspaceRuntime).length > 0 ? workspaceRuntime : null;
+  }
+  if ("desiredState" in config) {
+    snapshot.desiredState =
+      config.desiredState === "running" || config.desiredState === "stopped" || config.desiredState === "manual"
+        ? config.desiredState
+        : null;
+  }
+  if ("serviceStates" in config) {
+    const serviceStates = parseObject(config.serviceStates);
+    snapshot.serviceStates = Object.keys(serviceStates).length > 0
+      ? Object.fromEntries(
+          Object.entries(serviceStates).filter(([, state]) =>
+            state === "running" || state === "stopped" || state === "manual"
+          ),
+        ) as ExecutionWorkspaceConfig["serviceStates"]
+      : null;
   }
 
   const hasSnapshot = Object.values(snapshot).some((value) => {
