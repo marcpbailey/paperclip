@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
+  appendWithByteCap,
   DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE,
   renderPaperclipWakePrompt,
   runChildProcess,
@@ -108,6 +109,16 @@ describe("runChildProcess", () => {
     expect(Number.isInteger(descendantPid) && descendantPid > 0).toBe(true);
 
     expect(await waitForPidExit(descendantPid!, 2_000)).toBe(true);
+  });
+});
+
+describe("appendWithByteCap", () => {
+  it("keeps valid UTF-8 when trimming through multibyte text", () => {
+    const output = appendWithByteCap("prefix ", "hello — world", 7);
+
+    expect(output).not.toContain("\uFFFD");
+    expect(Buffer.from(output, "utf8").toString("utf8")).toBe(output);
+    expect(Buffer.byteLength(output, "utf8")).toBeLessThanOrEqual(7);
   });
 });
 

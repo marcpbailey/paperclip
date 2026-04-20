@@ -5,7 +5,7 @@ import {
   getEmbeddedPostgresTestSupport,
   startEmbeddedPostgresTestDatabase,
 } from "./helpers/embedded-postgres.js";
-import { heartbeatService } from "../services/heartbeat.ts";
+import { boundHeartbeatRunEventPayloadForStorage, heartbeatService } from "../services/heartbeat.ts";
 
 const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
 const describeEmbeddedPostgres = embeddedPostgresSupport.supported ? describe : describe.skip;
@@ -200,5 +200,27 @@ describeEmbeddedPostgres("heartbeat list", () => {
     expect(typeof result?.stdout).toBe("string");
     expect((result?.stdout as string).length).toBeLessThan(oversizedStdout.length);
     expect(result).not.toHaveProperty("nestedHuge");
+  });
+});
+
+describe("heartbeat run event payload bounding", () => {
+  it("truncates oversized adapter metadata before storage", () => {
+    const payload = boundHeartbeatRunEventPayloadForStorage({
+      adapterType: "codex_local",
+      prompt: "x".repeat(40_000),
+      context: {
+        issueId: "issue-1",
+        memory: "y".repeat(40_000),
+      },
+    });
+
+    expect(payload.adapterType).toBe("codex_local");
+    expect(typeof payload.prompt).toBe("string");
+    expect((payload.prompt as string).length).toBeLessThan(20_000);
+    expect(payload.prompt).toContain("[truncated");
+    expect(payload.context).toMatchObject({
+      issueId: "issue-1",
+    });
+    expect(JSON.stringify(payload).length).toBeLessThan(45_000);
   });
 });

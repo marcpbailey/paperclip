@@ -191,6 +191,22 @@ export function appendWithCap(prev: string, chunk: string, cap = MAX_CAPTURE_BYT
   return combined.length > cap ? combined.slice(combined.length - cap) : combined;
 }
 
+export function appendWithByteCap(prev: string, chunk: string, cap = MAX_CAPTURE_BYTES) {
+  const combined = prev + chunk;
+  const bytes = Buffer.byteLength(combined, "utf8");
+  if (bytes <= cap) return combined;
+
+  const buffer = Buffer.from(combined, "utf8");
+  let start = Math.max(0, bytes - cap);
+  while (start < buffer.length && (buffer[start]! & 0xc0) === 0x80) start += 1;
+  return buffer.subarray(start).toString("utf8");
+}
+
+function resumeReadable(readable: { resume: () => unknown; destroyed?: boolean } | null | undefined) {
+  if (!readable || readable.destroyed) return;
+  readable.resume();
+}
+
 export function resolvePathValue(obj: Record<string, unknown>, dottedPath: string) {
   const parts = dottedPath.split(".");
   let cursor: unknown = obj;
@@ -1283,19 +1299,27 @@ export async function runChildProcess(
             : null;
 
         child.stdout?.on("data", (chunk: unknown) => {
+          const readable = child.stdout;
+          if (!readable) return;
+          readable.pause();
           const text = String(chunk);
           stdout = appendWithCap(stdout, text);
           logChain = logChain
             .then(() => opts.onLog("stdout", text))
-            .catch((err) => onLogError(err, runId, "failed to append stdout log chunk"));
+            .catch((err) => onLogError(err, runId, "failed to append stdout log chunk"))
+            .finally(() => resumeReadable(readable));
         });
 
         child.stderr?.on("data", (chunk: unknown) => {
+          const readable = child.stderr;
+          if (!readable) return;
+          readable.pause();
           const text = String(chunk);
           stderr = appendWithCap(stderr, text);
           logChain = logChain
             .then(() => opts.onLog("stderr", text))
-            .catch((err) => onLogError(err, runId, "failed to append stderr log chunk"));
+            .catch((err) => onLogError(err, runId, "failed to append stderr log chunk"))
+            .finally(() => resumeReadable(readable));
         });
 
         const stdin = child.stdin;

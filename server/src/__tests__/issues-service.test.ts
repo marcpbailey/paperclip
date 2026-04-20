@@ -22,11 +22,19 @@ import {
   startEmbeddedPostgresTestDatabase,
 } from "./helpers/embedded-postgres.js";
 import { instanceSettingsService } from "../services/instance-settings.ts";
-import { issueService } from "../services/issues.ts";
+import { clampIssueListLimit, ISSUE_LIST_MAX_LIMIT, issueService } from "../services/issues.ts";
 import { buildProjectMentionHref } from "@paperclipai/shared";
 
 const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
 const describeEmbeddedPostgres = embeddedPostgresSupport.supported ? describe : describe.skip;
+
+describe("issue list limit helpers", () => {
+  it("clamps untrusted issue-list limits to the server maximum", () => {
+    expect(clampIssueListLimit(0)).toBe(1);
+    expect(clampIssueListLimit(25.9)).toBe(25);
+    expect(clampIssueListLimit(ISSUE_LIST_MAX_LIMIT + 10)).toBe(ISSUE_LIST_MAX_LIMIT);
+  });
+});
 
 async function ensureIssueRelationsTable(db: ReturnType<typeof createDb>) {
   await db.execute(sql.raw(`

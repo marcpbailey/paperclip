@@ -66,6 +66,8 @@ export const AGENT_ROLE_LABELS: Record<AgentRole, string> = {
   general: "General",
 };
 
+export const AGENT_DEFAULT_MAX_CONCURRENT_RUNS = 5;
+
 export const AGENT_ICON_NAMES = [
   "bot",
   "cpu",

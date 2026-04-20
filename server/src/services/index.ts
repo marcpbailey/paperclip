@@ -12,7 +12,13 @@ export {
   refreshIssueContinuationSummary,
 } from "./issue-continuation-summary.js";
 export { projectService } from "./projects.js";
-export { issueService, type IssueFilters } from "./issues.js";
+export {
+  clampIssueListLimit,
+  ISSUE_LIST_DEFAULT_LIMIT,
+  ISSUE_LIST_MAX_LIMIT,
+  issueService,
+  type IssueFilters,
+} from "./issues.js";
 export { issueApprovalService } from "./issue-approvals.js";
 export { goalService } from "./goals.js";
 export { activityService, type ActivityFilters } from "./activity.js";

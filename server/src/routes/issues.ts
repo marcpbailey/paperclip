@@ -40,7 +40,10 @@ import {
   heartbeatService,
   instanceSettingsService,
   issueApprovalService,
+  ISSUE_LIST_DEFAULT_LIMIT,
+  ISSUE_LIST_MAX_LIMIT,
   issueService,
+  clampIssueListLimit,
   documentService,
   logActivity,
   projectService,
@@ -618,8 +621,10 @@ export function issueRoutes(
         ? req.actor.userId
         : unreadForUserFilterRaw;
     const rawLimit = req.query.limit as string | undefined;
-    const parsedLimit = rawLimit ? Number.parseInt(rawLimit, 10) : null;
-    const limit = parsedLimit ?? undefined;
+    const parsedLimit = rawLimit !== undefined && /^\d+$/.test(rawLimit)
+      ? Number.parseInt(rawLimit, 10)
+      : null;
+    const limit = parsedLimit === null ? ISSUE_LIST_DEFAULT_LIMIT : clampIssueListLimit(parsedLimit);
 
     if (assigneeUserFilterRaw === "me" && (!assigneeUserId || req.actor.type !== "board")) {
       res.status(403).json({ error: "assigneeUserId=me requires board authentication" });
@@ -638,7 +643,7 @@ export function issueRoutes(
       return;
     }
     if (rawLimit !== undefined && (parsedLimit === null || !Number.isInteger(parsedLimit) || parsedLimit <= 0)) {
-      res.status(400).json({ error: "limit must be a positive integer" });
+      res.status(400).json({ error: `limit must be a positive integer up to ${ISSUE_LIST_MAX_LIMIT}` });
       return;
     }
 

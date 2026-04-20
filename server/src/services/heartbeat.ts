@@ -4,8 +4,14 @@ import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
 import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
-import { ISSUE_CONTINUATION_SUMMARY_DOCUMENT_KEY } from "@paperclipai/shared";
-import type { BillingType, ExecutionWorkspace, ExecutionWorkspaceConfig, RunLivenessState } from "@paperclipai/shared";
+import {
+  AGENT_DEFAULT_MAX_CONCURRENT_RUNS,
+  ISSUE_CONTINUATION_SUMMARY_DOCUMENT_KEY,
+  type BillingType,
+  type ExecutionWorkspace,
+  type ExecutionWorkspaceConfig,
+  type RunLivenessState,
+} from "@paperclipai/shared";
 import {
   agents,
   agentRuntimeState,
@@ -31,7 +37,7 @@ import { getRunLogStore, type RunLogHandle } from "./run-log-store.js";
 import { getServerAdapter, runningProcesses } from "../adapters/index.js";
 import type { AdapterExecutionResult, AdapterInvocationMeta, AdapterSessionCodec, UsageSummary } from "../adapters/index.js";
 import { createLocalAgentJwt } from "../agent-auth-jwt.js";
-import { parseObject, asBoolean, asNumber, appendWithCap, MAX_EXCERPT_BYTES } from "../adapters/utils.js";
+import { parseObject, asBoolean, asNumber, appendWithByteCap, MAX_EXCERPT_BYTES } from "../adapters/utils.js";
 import { costService } from "./costs.js";
 import { trackAgentFirstHeartbeat } from "@paperclipai/shared/telemetry";
 import { getTelemetryClient } from "../telemetry.js";
@@ -104,7 +110,11 @@ import { extractSkillMentionIds } from "@paperclipai/shared";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const MAX_PERSISTED_LOG_CHUNK_CHARS = 64 * 1024;
-const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
+const MAX_RUN_EVENT_PAYLOAD_STRING_CHARS = 16 * 1024;
+const MAX_RUN_EVENT_PAYLOAD_ARRAY_ITEMS = 50;
+const MAX_RUN_EVENT_PAYLOAD_OBJECT_KEYS = 100;
+const MAX_RUN_EVENT_PAYLOAD_DEPTH = 6;
+const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = AGENT_DEFAULT_MAX_CONCURRENT_RUNS;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_MAX = 10;
 const DEFERRED_WAKE_CONTEXT_KEY = "_paperclipWakeContext";
 const WAKE_COMMENT_IDS_KEY = "wakeCommentIds";
@@ -119,6 +129,8 @@ const MAX_INLINE_WAKE_COMMENT_BODY_CHARS = 4_000;
 const MAX_INLINE_WAKE_COMMENT_BODY_TOTAL_CHARS = 12_000;
 const execFile = promisify(execFileCallback);
 const ACTIVE_HEARTBEAT_RUN_STATUSES = ["queued", "running"] as const;
+const UNSUCCESSFUL_HEARTBEAT_RUN_TERMINAL_STATUSES = ["failed", "cancelled", "timed_out"] as const;
+const RUNNING_ISSUE_WAKE_REASONS_REQUIRING_FOLLOWUP = new Set(["approval_approved"]);
 const SESSIONED_LOCAL_ADAPTERS = new Set([
   "claude_local",
   "codex_local",
@@ -504,6 +516,15 @@ const heartbeatRunSafeColumns = {
   resultJson: heartbeatRunSafeResultJsonColumn,
 } as const;
 
+const heartbeatRunSqlAsciiSafeColumns = {
+  ...getTableColumns(heartbeatRuns),
+  processGroupId: heartbeatRunProcessGroupIdColumn,
+  error: sql<string | null>`NULL`.as("error"),
+  resultJson: sql<Record<string, unknown> | null>`NULL`.as("resultJson"),
+  stdoutExcerpt: sql<string | null>`NULL`.as("stdoutExcerpt"),
+  stderrExcerpt: sql<string | null>`NULL`.as("stderrExcerpt"),
+} as const;
+
 const heartbeatRunLogAccessColumns = {
   id: heartbeatRuns.id,
   companyId: heartbeatRuns.companyId,
@@ -529,7 +550,81 @@ const heartbeatRunIssueSummaryColumns = {
 } as const;
 
 function appendExcerpt(prev: string, chunk: string) {
-  return appendWithCap(prev, chunk, MAX_EXCERPT_BYTES);
+  return appendWithByteCap(prev, chunk, MAX_EXCERPT_BYTES);
+}
+
+function truncateRunEventString(value: string) {
+  if (value.length <= MAX_RUN_EVENT_PAYLOAD_STRING_CHARS) return value;
+  const omittedChars = value.length - MAX_RUN_EVENT_PAYLOAD_STRING_CHARS;
+  return `${value.slice(0, MAX_RUN_EVENT_PAYLOAD_STRING_CHARS)}\n[truncated ${omittedChars} chars]`;
+}
+
+function boundRunEventValue(value: unknown, depth: number, seen: WeakSet<object>): unknown {
+  if (typeof value === "string") {
+    return truncateRunEventString(value);
+  }
+  if (
+    value === null
+    || typeof value === "number"
+    || typeof value === "boolean"
+  ) {
+    return value;
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (Array.isArray(value)) {
+    if (depth >= MAX_RUN_EVENT_PAYLOAD_DEPTH) {
+      return {
+        _truncated: true,
+        type: "array",
+        originalLength: value.length,
+      };
+    }
+    const bounded = value
+      .slice(0, MAX_RUN_EVENT_PAYLOAD_ARRAY_ITEMS)
+      .map((entry) => boundRunEventValue(entry, depth + 1, seen));
+    if (value.length > MAX_RUN_EVENT_PAYLOAD_ARRAY_ITEMS) {
+      bounded.push({
+        _truncated: true,
+        omittedItems: value.length - MAX_RUN_EVENT_PAYLOAD_ARRAY_ITEMS,
+      });
+    }
+    return bounded;
+  }
+  if (typeof value !== "object" || value === undefined) {
+    return null;
+  }
+  if (seen.has(value)) {
+    return "[Circular]";
+  }
+  seen.add(value);
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (depth >= MAX_RUN_EVENT_PAYLOAD_DEPTH) {
+    const bounded = {
+      _truncated: true,
+      type: "object",
+      keys: entries.map(([key]) => key).slice(0, 20),
+    };
+    seen.delete(value);
+    return bounded;
+  }
+
+  const out: Record<string, unknown> = {};
+  for (const [key, entryValue] of entries.slice(0, MAX_RUN_EVENT_PAYLOAD_OBJECT_KEYS)) {
+    out[key] = boundRunEventValue(entryValue, depth + 1, seen);
+  }
+  if (entries.length > MAX_RUN_EVENT_PAYLOAD_OBJECT_KEYS) {
+    out._truncated = true;
+    out._omittedKeys = entries.length - MAX_RUN_EVENT_PAYLOAD_OBJECT_KEYS;
+  }
+  seen.delete(value);
+  return out;
+}
+
+export function boundHeartbeatRunEventPayloadForStorage(payload: Record<string, unknown>): Record<string, unknown> {
+  const bounded = boundRunEventValue(payload, 0, new WeakSet());
+  return parseObject(bounded) ?? { _truncated: true };
 }
 
 function redactInlineBase64ImageData(chunk: string) {
@@ -714,6 +809,22 @@ function summarizeRunFailureForIssueComment(
   if (errorCode) return ` Latest retry failure: \`${errorCode}\`.`;
   if (summary) return ` Latest retry failure: ${summary}.`;
   return null;
+}
+
+function didAutomaticRecoveryFail(
+  latestRun: Pick<typeof heartbeatRuns.$inferSelect, "status" | "contextSnapshot"> | null,
+  expectedRetryReason: "assignment_recovery" | "issue_continuation_needed",
+) {
+  if (!latestRun) return false;
+
+  const latestContext = parseObject(latestRun.contextSnapshot);
+  const latestRetryReason = readNonEmptyString(latestContext.retryReason);
+  return (
+    latestRetryReason === expectedRetryReason &&
+    UNSUCCESSFUL_HEARTBEAT_RUN_TERMINAL_STATUSES.includes(
+      latestRun.status as (typeof UNSUCCESSFUL_HEARTBEAT_RUN_TERMINAL_STATUSES)[number],
+    )
+  );
 }
 
 function normalizeLedgerBillingType(value: unknown): BillingType {
@@ -1093,6 +1204,15 @@ function shouldAutoCheckoutIssueForWake(input: {
   if (wakeReason.startsWith("execution_")) return false;
 
   return true;
+}
+
+function shouldQueueFollowupForRunningIssueWake(input: {
+  contextSnapshot: Record<string, unknown> | null | undefined;
+  wakeCommentId: string | null;
+}) {
+  if (input.wakeCommentId) return true;
+  const wakeReason = readNonEmptyString(input.contextSnapshot?.wakeReason);
+  return Boolean(wakeReason && RUNNING_ISSUE_WAKE_REASONS_REQUIRING_FOLLOWUP.has(wakeReason));
 }
 
 function isCheckoutConflictError(error: unknown): boolean {
@@ -1577,6 +1697,26 @@ export function heartbeatService(db: Db) {
     cancelWorkForScope: cancelBudgetScopeWork,
   };
   const budgets = budgetService(db, budgetHooks);
+  let unsafeTextProjectionPromise: Promise<boolean> | null = null;
+
+  async function hasUnsafeTextProjectionDatabase() {
+    if (!unsafeTextProjectionPromise) {
+      unsafeTextProjectionPromise = db
+        .execute(sql`select current_setting('server_encoding') as server_encoding`)
+        .then((rows) => {
+          const first = Array.isArray(rows) ? rows[0] : null;
+          const serverEncoding = typeof first === "object" && first !== null
+            ? (first as Record<string, unknown>).server_encoding
+            : null;
+          return typeof serverEncoding === "string" && serverEncoding.toUpperCase() === "SQL_ASCII";
+        })
+        .catch((err) => {
+          logger.warn({ err }, "failed to inspect database server encoding; using conservative heartbeat result projection");
+          return true;
+        });
+    }
+    return unsafeTextProjectionPromise;
+  }
 
   async function getAgent(agentId: string) {
     return db
@@ -1587,8 +1727,15 @@ export function heartbeatService(db: Db) {
   }
 
   async function getRun(runId: string, opts?: { unsafeFullResultJson?: boolean }) {
+    const safeForLegacyEncoding = !opts?.unsafeFullResultJson && await hasUnsafeTextProjectionDatabase();
     return db
-      .select(opts?.unsafeFullResultJson ? getTableColumns(heartbeatRuns) : heartbeatRunSafeColumns)
+      .select(
+        opts?.unsafeFullResultJson
+          ? getTableColumns(heartbeatRuns)
+          : safeForLegacyEncoding
+            ? heartbeatRunSqlAsciiSafeColumns
+            : heartbeatRunSafeColumns,
+      )
       .from(heartbeatRuns)
       .where(eq(heartbeatRuns.id, runId))
       .then((rows) => rows[0] ?? null);
@@ -2393,9 +2540,12 @@ export function heartbeatService(db: Db) {
     const sanitizedMessage = event.message
       ? redactCurrentUserText(event.message, currentUserRedactionOptions)
       : event.message;
-    const sanitizedPayload = event.payload
-      ? redactCurrentUserValue(event.payload, currentUserRedactionOptions)
+    const boundedPayload = event.payload
+      ? boundHeartbeatRunEventPayloadForStorage(event.payload)
       : event.payload;
+    const sanitizedPayload = boundedPayload
+      ? redactCurrentUserValue(boundedPayload, currentUserRedactionOptions)
+      : boundedPayload;
 
     await db.insert(heartbeatRunEvents).values({
       companyId: run.companyId,
@@ -3484,16 +3634,13 @@ export function heartbeatService(db: Db) {
       }
 
       const latestRun = await getLatestIssueRun(issue.companyId, issue.id);
-      const latestContext = parseObject(latestRun?.contextSnapshot);
-      const latestRetryReason = readNonEmptyString(latestContext.retryReason);
-
       if (issue.status === "todo") {
         if (!latestRun || latestRun.status === "succeeded") {
           result.skipped += 1;
           continue;
         }
 
-        if (latestRetryReason === "assignment_recovery") {
+        if (didAutomaticRecoveryFail(latestRun, "assignment_recovery")) {
           const failureSummary = summarizeRunFailureForIssueComment(latestRun);
           const updated = await escalateStrandedAssignedIssue({
             issue,
@@ -3530,7 +3677,12 @@ export function heartbeatService(db: Db) {
         continue;
       }
 
-      if (latestRetryReason === "issue_continuation_needed") {
+      if (!latestRun && !issue.checkoutRunId && !issue.executionRunId) {
+        result.skipped += 1;
+        continue;
+      }
+
+      if (didAutomaticRecoveryFail(latestRun, "issue_continuation_needed")) {
         const failureSummary = summarizeRunFailureForIssueComment(latestRun);
         const updated = await escalateStrandedAssignedIssue({
           issue,
@@ -5137,12 +5289,12 @@ export function heartbeatService(db: Db) {
             normalizeAgentNameKey(executionAgent?.name);
           const isSameExecutionAgent =
             Boolean(executionAgentNameKey) && executionAgentNameKey === agentNameKey;
-          const shouldQueueFollowupForCommentWake =
-            Boolean(wakeCommentId) &&
+          const shouldQueueFollowupForRunningWake =
+            shouldQueueFollowupForRunningIssueWake({ contextSnapshot: enrichedContextSnapshot, wakeCommentId }) &&
             activeExecutionRun.status === "running" &&
             isSameExecutionAgent;
 
-          if (isSameExecutionAgent && !shouldQueueFollowupForCommentWake) {
+          if (isSameExecutionAgent && !shouldQueueFollowupForRunningWake) {
             const mergedContextSnapshot = mergeCoalescedContextSnapshot(
               activeExecutionRun.contextSnapshot,
               enrichedContextSnapshot,
@@ -5319,12 +5471,14 @@ export function heartbeatService(db: Db) {
     const sameScopeRunningRun = activeRuns.find(
       (candidate) => candidate.status === "running" && isSameTaskScope(runTaskKey(candidate), taskKey),
     );
-    const shouldQueueFollowupForCommentWake =
-      Boolean(wakeCommentId) && Boolean(sameScopeRunningRun) && !sameScopeQueuedRun;
+    const shouldQueueFollowupForRunningWake =
+      Boolean(sameScopeRunningRun) &&
+      !sameScopeQueuedRun &&
+      shouldQueueFollowupForRunningIssueWake({ contextSnapshot: enrichedContextSnapshot, wakeCommentId });
 
     const coalescedTargetRun =
       sameScopeQueuedRun ??
-      (shouldQueueFollowupForCommentWake ? null : sameScopeRunningRun ?? null);
+      (shouldQueueFollowupForRunningWake ? null : sameScopeRunningRun ?? null);
 
     if (coalescedTargetRun) {
       const mergedContextSnapshot = mergeCoalescedContextSnapshot(
@@ -5646,12 +5800,21 @@ export function heartbeatService(db: Db) {
 
   return {
     list: async (companyId: string, agentId?: string, limit?: number) => {
+      const safeForLegacyEncoding = await hasUnsafeTextProjectionDatabase();
       const query = db
-        .select({
-          ...heartbeatRunListColumns,
-          ...heartbeatRunListContextColumns,
-          ...heartbeatRunListResultColumns,
-        })
+        .select(
+          safeForLegacyEncoding
+            ? {
+                ...heartbeatRunListColumns,
+                error: sql<string | null>`NULL`.as("error"),
+                ...heartbeatRunListContextColumns,
+              }
+            : {
+                ...heartbeatRunListColumns,
+                ...heartbeatRunListContextColumns,
+                ...heartbeatRunListResultColumns,
+              },
+        )
         .from(heartbeatRuns)
         .where(
           agentId
@@ -5679,7 +5842,15 @@ export function heartbeatService(db: Db) {
           resultCostUsd,
           resultCostUsdCamel,
           ...rest
-        } = row;
+        } = row as typeof row & {
+          resultSummary?: string | null;
+          resultResult?: string | null;
+          resultMessage?: string | null;
+          resultError?: string | null;
+          resultTotalCostUsd?: string | null;
+          resultCostUsd?: string | null;
+          resultCostUsdCamel?: string | null;
+        };
 
         return {
           ...rest,
@@ -5693,15 +5864,17 @@ export function heartbeatService(db: Db) {
             wakeSource: contextWakeSource,
             wakeTriggerDetail: contextWakeTriggerDetail,
           }),
-          resultJson: summarizeHeartbeatRunListResultJson({
-            summary: resultSummary,
-            result: resultResult,
-            message: resultMessage,
-            error: resultError,
-            totalCostUsd: resultTotalCostUsd,
-            costUsd: resultCostUsd,
-            costUsdCamel: resultCostUsdCamel,
-          }),
+          resultJson: safeForLegacyEncoding
+            ? null
+            : summarizeHeartbeatRunListResultJson({
+                summary: resultSummary,
+                result: resultResult,
+                message: resultMessage,
+                error: resultError,
+                totalCostUsd: resultTotalCostUsd,
+                costUsd: resultCostUsd,
+                costUsdCamel: resultCostUsdCamel,
+              }),
         };
       });
     },
@@ -5810,7 +5983,9 @@ export function heartbeatService(db: Db) {
         store: run.logStore,
         logRef: run.logRef,
         ...result,
-        content: redactCurrentUserText(result.content, await getCurrentUserRedactionOptions()),
+        // Run-log chunks are already redacted before they are appended to the store.
+        // Rewriting the full chunk again on every poll creates avoidable string copies.
+        content: result.content,
       };
     },
 
