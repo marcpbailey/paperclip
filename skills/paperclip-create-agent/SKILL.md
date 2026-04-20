@@ -65,7 +65,7 @@ curl -sS "$PAPERCLIP_API_URL/llms/agent-icons.txt" \
 - adapter and runtime config aligned to this environment
 - leave timer heartbeats off by default; only set `runtimeConfig.heartbeat.enabled=true` with an `intervalSec` when the role genuinely needs scheduled recurring work or the user explicitly asked for it
 - capabilities
-- run prompt in adapter config (`promptTemplate` where applicable)
+- run prompt in adapter config (`promptTemplate` where applicable). For coding or execution agents, include the Paperclip execution contract: start actionable work in the same heartbeat; do not stop at a plan unless planning was requested; leave durable progress with a clear next action; use child issues for long or parallel delegated work instead of polling; mark blocked work with owner/action; respect budget, pause/cancel, approval gates, and company boundaries.
 - source issue linkage (`sourceIssueId` or `sourceIssueIds`) when this hire came from an issue
 
 7. Submit hire request.
