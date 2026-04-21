@@ -30,6 +30,7 @@ import type {
   FeedbackDataSharingPreference,
   FeedbackVote,
   FeedbackVoteValue,
+  IssueRelationIssueSummary,
 } from "@paperclipai/shared";
 import type { ActiveRunForIssue, LiveRunForIssue } from "../api/heartbeats";
 import { useLiveRunTranscripts } from "./transcript/useLiveRunTranscripts";
@@ -75,6 +76,7 @@ import {
 } from "../lib/issue-chat-scroll";
 import { formatAssigneeUserLabel } from "../lib/assignees";
 import type { CompanyUserProfile } from "../lib/company-members";
+import { createIssueDetailPath } from "../lib/issueDetailBreadcrumb";
 import { timeAgo } from "../lib/timeAgo";
 import {
   describeToolInput,
@@ -89,7 +91,8 @@ import { cn, formatDateTime, formatShortDate } from "../lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
-import { AlertTriangle, ArrowRight, Brain, Check, ChevronDown, Copy, Hammer, Loader2, MoreHorizontal, Paperclip, Search, Square, ThumbsDown, ThumbsUp } from "lucide-react";
+import { AlertTriangle, ArrowRight, Brain, Check, ChevronDown, Copy, Hammer, Loader2, MoreHorizontal, Paperclip, PauseCircle, Search, Square, ThumbsDown, ThumbsUp } from "lucide-react";
+import { IssueLinkQuicklook } from "./IssueLinkQuicklook";
 
 interface IssueChatMessageContext {
   feedbackVoteByTargetId: Map<string, FeedbackVoteValue>;
@@ -215,6 +218,7 @@ interface IssueChatThreadProps {
   timelineEvents?: IssueTimelineEvent[];
   liveRuns?: LiveRunForIssue[];
   activeRun?: ActiveRunForIssue | null;
+  blockedBy?: IssueRelationIssueSummary[];
   companyId?: string | null;
   projectId?: string | null;
   issueStatus?: string;
@@ -299,6 +303,75 @@ class IssueChatErrorBoundary extends Component<IssueChatErrorBoundaryProps, Issu
     }
     return this.props.children;
   }
+}
+
+function IssueBlockedNotice({
+  issueStatus,
+  blockers,
+}: {
+  issueStatus?: string;
+  blockers: IssueRelationIssueSummary[];
+}) {
+  if (blockers.length === 0 && issueStatus !== "blocked") return null;
+
+  const blockerLabel = blockers.length === 1 ? "the linked issue" : "the linked issues";
+
+  return (
+    <div className="mb-3 rounded-md border border-amber-300/70 bg-amber-50/90 px-3 py-2.5 text-sm text-amber-950 shadow-sm dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
+      <div className="flex items-start gap-2">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300" />
+        <div className="min-w-0 space-y-1.5">
+          <p className="leading-5">
+            {blockers.length > 0
+              ? <>Work on this issue is blocked by {blockerLabel} until {blockers.length === 1 ? "it is" : "they are"} complete. Comments still wake the assignee for questions or triage.</>
+              : <>Work on this issue is blocked until it is moved back to todo. Comments still wake the assignee for questions or triage.</>}
+          </p>
+          {blockers.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {blockers.map((blocker) => {
+                const issuePathId = blocker.identifier ?? blocker.id;
+                return (
+                  <IssueLinkQuicklook
+                    key={blocker.id}
+                    issuePathId={issuePathId}
+                    to={createIssueDetailPath(issuePathId)}
+                    className="inline-flex max-w-full items-center gap-1 rounded-md border border-amber-300/70 bg-background/80 px-2 py-1 font-mono text-xs text-amber-950 transition-colors hover:border-amber-500 hover:bg-amber-100 hover:underline dark:border-amber-500/40 dark:bg-background/40 dark:text-amber-100 dark:hover:bg-amber-500/15"
+                  >
+                    <span>{blocker.identifier ?? blocker.id.slice(0, 8)}</span>
+                    <span className="max-w-[18rem] truncate font-sans text-[11px] text-amber-800 dark:text-amber-200">
+                      {blocker.title}
+                    </span>
+                  </IssueLinkQuicklook>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function IssueAssigneePausedNotice({ agent }: { agent: Agent | null }) {
+  if (!agent || agent.status !== "paused") return null;
+
+  const pauseDetail =
+    agent.pauseReason === "budget"
+      ? "It was paused by a budget hard stop."
+      : agent.pauseReason === "system"
+        ? "It was paused by the system."
+        : "It was paused manually.";
+
+  return (
+    <div className="mb-3 rounded-md border border-orange-300/70 bg-orange-50/90 px-3 py-2.5 text-sm text-orange-950 shadow-sm dark:border-orange-500/40 dark:bg-orange-500/10 dark:text-orange-100">
+      <div className="flex items-start gap-2">
+        <PauseCircle className="mt-0.5 h-4 w-4 shrink-0 text-orange-600 dark:text-orange-300" />
+        <p className="min-w-0 leading-5">
+          <span className="font-medium">{agent.name}</span> is paused. New runs will not start until the agent is resumed. {pauseDetail}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function fallbackAuthorLabel(message: ThreadMessage) {
@@ -446,8 +519,8 @@ function parseReassignment(target: string): PaperclipIssueRuntimeReassignment | 
 }
 
 function shouldImplicitlyReopenComment(issueStatus: string | undefined, assigneeValue: string) {
-  const isClosed = issueStatus === "done" || issueStatus === "cancelled";
-  return isClosed && assigneeValue.startsWith("agent:");
+  const resumesToTodo = issueStatus === "done" || issueStatus === "cancelled" || issueStatus === "blocked";
+  return resumesToTodo && assigneeValue.startsWith("agent:");
 }
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -2011,6 +2084,7 @@ export function IssueChatThread({
   timelineEvents = [],
   liveRuns = [],
   activeRun = null,
+  blockedBy = [],
   companyId,
   projectId,
   issueStatus,
@@ -2142,6 +2216,15 @@ export function IssueChatThread({
   }, [rawMessages]);
 
   const isRunning = displayLiveRuns.some((run) => run.status === "queued" || run.status === "running");
+  const unresolvedBlockers = useMemo(
+    () => blockedBy.filter((blocker) => blocker.status !== "done" && blocker.status !== "cancelled"),
+    [blockedBy],
+  );
+  const assignedAgent = useMemo(() => {
+    if (!currentAssigneeValue.startsWith("agent:")) return null;
+    const assigneeAgentId = currentAssigneeValue.slice("agent:".length);
+    return agentMap?.get(assigneeAgentId) ?? null;
+  }, [agentMap, currentAssigneeValue]);
   const feedbackVoteByTargetId = useMemo(() => {
     const map = new Map<string, FeedbackVoteValue>();
     for (const feedbackVote of feedbackVotes) {
@@ -2290,6 +2373,8 @@ export function IssueChatThread({
 
         {showComposer ? (
           <div ref={composerViewportAnchorRef}>
+            <IssueBlockedNotice issueStatus={issueStatus} blockers={unresolvedBlockers} />
+            <IssueAssigneePausedNotice agent={assignedAgent} />
             <IssueChatComposer
               ref={composerRef}
               onImageUpload={imageUploadHandler}

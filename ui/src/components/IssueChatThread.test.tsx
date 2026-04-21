@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Agent } from "@paperclipai/shared";
 import {
   IssueChatThread,
   canStopIssueChatRun,
@@ -113,6 +114,24 @@ vi.mock("./StatusBadge", () => ({
   StatusBadge: ({ status }: { status: string }) => <span>{status}</span>,
 }));
 
+vi.mock("./IssueLinkQuicklook", () => ({
+  IssueLinkQuicklook: ({
+    children,
+    to,
+    issuePathId,
+    className,
+  }: {
+    children: ReactNode;
+    to: string;
+    issuePathId: string;
+    className?: string;
+  }) => (
+    <a href={to} data-issue-path-id={issuePathId} className={className}>
+      {children}
+    </a>
+  ),
+}));
+
 vi.mock("../hooks/usePaperclipIssueRuntime", () => ({
   usePaperclipIssueRuntime: () => ({}),
 }));
@@ -165,6 +184,83 @@ describe("IssueChatThread", () => {
     expect(viewport).not.toBeNull();
     expect(viewport?.className).not.toContain("overflow-y-auto");
     expect(viewport?.className).not.toContain("max-h-[70vh]");
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it("shows unresolved blocker context above the composer", () => {
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        <MemoryRouter>
+          <IssueChatThread
+            comments={[]}
+            linkedRuns={[]}
+            timelineEvents={[]}
+            liveRuns={[]}
+            issueStatus="todo"
+            blockedBy={[
+              {
+                id: "blocker-1",
+                identifier: "PAP-1723",
+                title: "QA the install flow",
+                status: "blocked",
+                priority: "medium",
+                assigneeAgentId: "agent-1",
+                assigneeUserId: null,
+              },
+            ]}
+            onAdd={async () => {}}
+            enableLiveTranscriptPolling={false}
+          />
+        </MemoryRouter>,
+      );
+    });
+
+    expect(container.textContent).toContain("Work on this issue is blocked by the linked issue");
+    expect(container.textContent).toContain("Comments still wake the assignee for questions or triage");
+    expect(container.textContent).toContain("PAP-1723");
+    expect(container.textContent).toContain("QA the install flow");
+    expect(container.querySelector('[data-issue-path-id="PAP-1723"]')).not.toBeNull();
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it("shows paused assigned agent context above the composer", () => {
+    const root = createRoot(container);
+    const pausedAgent = {
+      id: "agent-1",
+      companyId: "company-1",
+      name: "CodexCoder",
+      status: "paused",
+      pauseReason: "manual",
+    } as Agent;
+
+    act(() => {
+      root.render(
+        <MemoryRouter>
+          <IssueChatThread
+            comments={[]}
+            linkedRuns={[]}
+            timelineEvents={[]}
+            liveRuns={[]}
+            agentMap={new Map([["agent-1", pausedAgent]])}
+            currentAssigneeValue="agent:agent-1"
+            onAdd={async () => {}}
+            enableLiveTranscriptPolling={false}
+          />
+        </MemoryRouter>,
+      );
+    });
+
+    expect(container.textContent).toContain("CodexCoder is paused");
+    expect(container.textContent).toContain("New runs will not start until the agent is resumed");
+    expect(container.textContent).toContain("It was paused manually");
 
     act(() => {
       root.unmount();
