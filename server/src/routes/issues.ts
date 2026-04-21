@@ -2041,6 +2041,7 @@ export function issueRoutes(
         ),
       };
     }
+
     const assigneeChanged =
       issue.assigneeAgentId !== existing.assigneeAgentId || issue.assigneeUserId !== existing.assigneeUserId;
     const statusChangedFromBacklog =
