@@ -20,6 +20,7 @@ export {
   type IssueFilters,
 } from "./issues.js";
 export { issueApprovalService } from "./issue-approvals.js";
+export { issueReferenceService } from "./issue-references.js";
 export { goalService } from "./goals.js";
 export { activityService, type ActivityFilters } from "./activity.js";
 export { approvalService } from "./approvals.js";
