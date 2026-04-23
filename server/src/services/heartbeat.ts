@@ -9,6 +9,7 @@ import {
   AGENT_DEFAULT_MAX_CONCURRENT_RUNS,
   ISSUE_CONTINUATION_SUMMARY_DOCUMENT_KEY,
   type BillingType,
+  type EnvironmentLeaseStatus,
   type ExecutionWorkspace,
   type ExecutionWorkspaceConfig,
   type RunLivenessState,
@@ -84,6 +85,7 @@ import {
   refreshIssueContinuationSummary,
 } from "./issue-continuation-summary.js";
 import { executionWorkspaceService, mergeExecutionWorkspaceConfig } from "./execution-workspaces.js";
+import { environmentService } from "./environments.js";
 import { workspaceOperationService } from "./workspace-operations.js";
 import { isProcessGroupAlive, terminateLocalService } from "./local-service-supervisor.js";
 import {
@@ -122,6 +124,10 @@ const MAX_RUN_EVENT_PAYLOAD_OBJECT_KEYS = 100;
 const MAX_RUN_EVENT_PAYLOAD_DEPTH = 6;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = AGENT_DEFAULT_MAX_CONCURRENT_RUNS;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_MAX = 10;
+const LIVENESS_BOOKKEEPING_ACTIVITY_ACTIONS = [
+  "environment.lease_acquired",
+  "environment.lease_released",
+];
 const DEFERRED_WAKE_CONTEXT_KEY = "_paperclipWakeContext";
 const WAKE_COMMENT_IDS_KEY = "wakeCommentIds";
 const PAPERCLIP_WAKE_PAYLOAD_KEY = "paperclipWake";
@@ -304,6 +310,12 @@ async function resolveRunScopedMentionedSkillKeys(input: {
   return mentionedSkillIds
     .map((skillId) => skillKeyById.get(skillId) ?? null)
     .filter((skillKey): skillKey is string => Boolean(skillKey));
+}
+
+function leaseReleaseStatusForRunStatus(
+  status: string | null | undefined,
+): Extract<EnvironmentLeaseStatus, "released" | "expired" | "failed"> {
+  return status === "failed" || status === "timed_out" ? "failed" : "released";
 }
 
 export function applyPersistedExecutionWorkspaceConfig(input: {
@@ -1832,6 +1844,7 @@ export function heartbeatService(db: Db) {
   const companySkills = companySkillService(db);
   const issuesSvc = issueService(db);
   const executionWorkspacesSvc = executionWorkspaceService(db);
+  const environmentsSvc = environmentService(db);
   const workspaceOperationsSvc = workspaceOperationService(db);
   const activeRunExecutions = new Set<string>();
   const budgetHooks = {
@@ -2991,6 +3004,26 @@ export function heartbeatService(db: Db) {
     return retryRun;
   }
 
+  async function hasDeferredIssueCommentWake(companyId: string, issueId: string, agentId: string) {
+    const deferredPayloads = await db
+      .select({ payload: agentWakeupRequests.payload })
+      .from(agentWakeupRequests)
+      .where(
+        and(
+          eq(agentWakeupRequests.companyId, companyId),
+          eq(agentWakeupRequests.agentId, agentId),
+          eq(agentWakeupRequests.status, "deferred_issue_execution"),
+          sql`${agentWakeupRequests.payload} ->> 'issueId' = ${issueId}`,
+        ),
+      );
+
+    return deferredPayloads.some(({ payload }) => {
+      const parsedPayload = parseObject(payload);
+      const deferredContext = parseObject(parsedPayload[DEFERRED_WAKE_CONTEXT_KEY]);
+      return Boolean(deriveCommentId(deferredContext, parsedPayload));
+    });
+  }
+
   async function finalizeIssueCommentPolicy(
     run: typeof heartbeatRuns.$inferSelect,
     agent: typeof agents.$inferSelect,
@@ -3040,6 +3073,21 @@ export function heartbeatService(db: Db) {
           issueCommentRetryQueuedAt: null,
         });
       }
+      return { outcome: "not_applicable" as const, queuedRun: null };
+    }
+
+    if (await hasDeferredIssueCommentWake(run.companyId, issueId, run.agentId)) {
+      await patchRunIssueCommentStatus(run.id, {
+        issueCommentStatus: "not_applicable",
+        issueCommentSatisfiedByCommentId: null,
+        issueCommentRetryQueuedAt: null,
+      });
+      await appendRunEvent(run, await nextRunEventSeq(run.id), {
+        eventType: "lifecycle",
+        stream: "system",
+        level: "info",
+        message: "Run ended without an issue comment; a deferred comment wake already exists for this issue",
+      });
       return { outcome: "not_applicable" as const, queuedRun: null };
     }
 
@@ -3698,7 +3746,13 @@ export function heartbeatService(db: Db) {
         latestAt: sql<Date | null>`max(${activityLog.createdAt})`,
       })
       .from(activityLog)
-      .where(and(eq(activityLog.companyId, run.companyId), eq(activityLog.runId, run.id)));
+      .where(
+        and(
+          eq(activityLog.companyId, run.companyId),
+          eq(activityLog.runId, run.id),
+          notInArray(activityLog.action, LIVENESS_BOOKKEEPING_ACTIVITY_ACTIONS),
+        ),
+      );
 
     const [eventStats] = await db
       .select({
@@ -5215,6 +5269,47 @@ export function heartbeatService(db: Db) {
       })(),
     };
     context.paperclipWorkspaces = resolvedWorkspace.workspaceHints;
+    const localEnvironment = await environmentsSvc.ensureLocalEnvironment(agent.companyId);
+    const environmentLease = await environmentsSvc.acquireLease({
+      companyId: agent.companyId,
+      environmentId: localEnvironment.id,
+      executionWorkspaceId: persistedExecutionWorkspace?.id ?? null,
+      issueId: issueId ?? null,
+      heartbeatRunId: run.id,
+      leasePolicy: "ephemeral",
+      provider: "local",
+      metadata: {
+        driver: "local",
+        executionWorkspaceMode: persistedExecutionWorkspace?.mode ?? effectiveExecutionWorkspaceMode,
+        cwd: executionWorkspace.cwd,
+      },
+    });
+    context.paperclipEnvironment = {
+      id: localEnvironment.id,
+      name: localEnvironment.name,
+      driver: localEnvironment.driver,
+      leaseId: environmentLease.id,
+    };
+    await logActivity(db, {
+      companyId: agent.companyId,
+      actorType: "agent",
+      actorId: agent.id,
+      agentId: agent.id,
+      runId: run.id,
+      action: "environment.lease_acquired",
+      entityType: "environment_lease",
+      entityId: environmentLease.id,
+      details: {
+        environmentId: localEnvironment.id,
+        driver: localEnvironment.driver,
+        leasePolicy: environmentLease.leasePolicy,
+        provider: environmentLease.provider,
+        executionWorkspaceId: environmentLease.executionWorkspaceId,
+        issueId,
+      },
+    }).catch((err) => {
+      logger.warn({ err, runId: run.id }, "failed to log environment lease acquisition");
+    });
     const runtimeServiceIntents = (() => {
       const runtimeConfig = parseObject(resolvedConfig.workspaceRuntime);
       return Array.isArray(runtimeConfig.services)
@@ -5231,6 +5326,13 @@ export function heartbeatService(db: Db) {
     if (executionWorkspace.projectId && !readNonEmptyString(context.projectId)) {
       context.projectId = executionWorkspace.projectId;
     }
+    await db
+      .update(heartbeatRuns)
+      .set({
+        contextSnapshot: context,
+        updatedAt: new Date(),
+      })
+      .where(eq(heartbeatRuns.id, run.id));
     const runtimeSessionFallback = taskKey || resetTaskSession ? null : runtime.sessionId;
     let previousSessionDisplayId = truncateDisplayId(
       explicitResumeSessionDisplayId ??
@@ -5823,6 +5925,34 @@ export function heartbeatService(db: Db) {
           // DB calls threw (e.g. a transient DB error in finalizeAgentStatus).
           await finalizeAgentStatus(run.agentId, "failed").catch(() => undefined);
         } finally {
+          const latestRun = await getRun(run.id).catch(() => null);
+          const releasedLeases = await environmentsSvc
+            .releaseLeasesForRun(run.id, leaseReleaseStatusForRunStatus(latestRun?.status))
+            .catch((err) => {
+              logger.warn({ err, runId: run.id }, "failed to release environment leases for heartbeat run");
+              return [];
+            });
+          for (const lease of releasedLeases) {
+            await logActivity(db, {
+              companyId: run.companyId,
+              actorType: "agent",
+              actorId: run.agentId,
+              agentId: run.agentId,
+              runId: run.id,
+              action: "environment.lease_released",
+              entityType: "environment_lease",
+              entityId: lease.id,
+              details: {
+                environmentId: lease.environmentId,
+                driver: lease.metadata?.driver ?? "local",
+                leasePolicy: lease.leasePolicy,
+                provider: lease.provider,
+                executionWorkspaceId: lease.executionWorkspaceId,
+                issueId: lease.issueId,
+                status: lease.status,
+              },
+            }).catch(() => undefined);
+          }
           await releaseRuntimeServicesForRun(run.id).catch(() => undefined);
           activeRunExecutions.delete(run.id);
           await startNextQueuedRunForAgent(run.agentId);
