@@ -31,6 +31,7 @@ import type {
   FeedbackDataSharingPreference,
   FeedbackVote,
   FeedbackVoteValue,
+  IssueAttachment,
   IssueRelationIssueSummary,
 } from "@paperclipai/shared";
 import type { ActiveRunForIssue, LiveRunForIssue } from "../api/heartbeats";
@@ -219,7 +220,7 @@ export interface IssueChatComposerHandle {
 
 interface IssueChatComposerProps {
   onImageUpload?: (file: File) => Promise<string>;
-  onAttachImage?: (file: File) => Promise<void>;
+  onAttachImage?: (file: File) => Promise<IssueAttachment | void>;
   draftKey?: string;
   enableReassign?: boolean;
   reassignOptions?: InlineEntityOption[];
@@ -259,7 +260,7 @@ interface IssueChatThreadProps {
   onCancelRun?: () => Promise<void>;
   onStopRun?: (runId: string) => Promise<void>;
   imageUploadHandler?: (file: File) => Promise<string>;
-  onAttachImage?: (file: File) => Promise<void>;
+  onAttachImage?: (file: File) => Promise<IssueAttachment | void>;
   draftKey?: string;
   enableReassign?: boolean;
   reassignOptions?: InlineEntityOption[];
@@ -508,8 +509,25 @@ const DRAFT_DEBOUNCE_MS = 800;
 const COMPOSER_FOCUS_SCROLL_PADDING_PX = 96;
 const SUBMIT_SCROLL_RESERVE_VH = 0.4;
 
+type ComposerAttachmentItem = {
+  id: string;
+  name: string;
+  size: number;
+  status: "uploading" | "attached" | "error";
+  inline: boolean;
+  contentPath?: string;
+  error?: string;
+};
+
 function hasFilePayload(evt: ReactDragEvent<HTMLDivElement>) {
   return Array.from(evt.dataTransfer?.types ?? []).includes("Files");
+}
+
+function formatAttachmentSize(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function toIsoString(value: string | Date | null | undefined): string | null {
@@ -2055,6 +2073,7 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
   const [submitting, setSubmitting] = useState(false);
   const [attaching, setAttaching] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [composerAttachments, setComposerAttachments] = useState<ComposerAttachmentItem[]>([]);
   const dragDepthRef = useRef(0);
   const effectiveSuggestedAssigneeValue = suggestedAssigneeValue ?? currentAssigneeValue;
   const [reassignTarget, setReassignTarget] = useState(effectiveSuggestedAssigneeValue);
@@ -2148,6 +2167,7 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
       queueViewportRestore(viewportSnapshot);
       await appendPromise;
       if (draftKey) clearDraft(draftKey);
+      setComposerAttachments([]);
       setReassignTarget(effectiveSuggestedAssigneeValue);
     } catch {
       setBody((current) =>
@@ -2163,13 +2183,59 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
   }
 
   async function attachFile(file: File) {
-    if (onImageUpload && file.type.startsWith("image/")) {
-      const url = await onImageUpload(file);
-      const safeName = file.name.replace(/[[\]]/g, "\\$&");
-      const markdown = `![${safeName}](${url})`;
-      setBody((prev) => prev ? `${prev}\n\n${markdown}` : markdown);
-    } else if (onAttachImage) {
-      await onAttachImage(file);
+    const attachmentId = `${file.name}:${file.size}:${file.lastModified}:${Math.random().toString(36).slice(2)}`;
+    const inline = Boolean(onImageUpload && file.type.startsWith("image/"));
+    setComposerAttachments((prev) => [
+      ...prev,
+      {
+        id: attachmentId,
+        name: file.name,
+        size: file.size,
+        status: "uploading",
+        inline,
+      },
+    ]);
+
+    try {
+      if (onImageUpload && file.type.startsWith("image/")) {
+        const url = await onImageUpload(file);
+        const safeName = file.name.replace(/[[\]]/g, "\\$&");
+        const markdown = `![${safeName}](${url})`;
+        setBody((prev) => prev ? `${prev}\n\n${markdown}` : markdown);
+        setComposerAttachments((prev) => prev.map((item) =>
+          item.id === attachmentId
+            ? { ...item, status: "attached", contentPath: url }
+            : item,
+        ));
+      } else if (onAttachImage) {
+        const attachment = await onAttachImage(file);
+        setComposerAttachments((prev) => prev.map((item) =>
+          item.id === attachmentId
+            ? {
+                ...item,
+                status: "attached",
+                contentPath: attachment?.contentPath,
+                name: attachment?.originalFilename ?? item.name,
+              }
+            : item,
+        ));
+      } else {
+        setComposerAttachments((prev) => prev.map((item) =>
+          item.id === attachmentId
+            ? { ...item, status: "error", error: "This file type cannot be attached here" }
+            : item,
+        ));
+      }
+    } catch (err) {
+      setComposerAttachments((prev) => prev.map((item) =>
+        item.id === attachmentId
+          ? {
+              ...item,
+              status: "error",
+              error: err instanceof Error ? err.message : "Upload failed",
+            }
+          : item,
+      ));
     }
   }
 
@@ -2202,6 +2268,37 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
     setIsDragOver(false);
   }
 
+  function handleFileDragEnter(evt: ReactDragEvent<HTMLDivElement>) {
+    if (!canAcceptFiles || !hasFilePayload(evt)) return;
+    evt.preventDefault();
+    evt.stopPropagation();
+    dragDepthRef.current += 1;
+    setIsDragOver(true);
+  }
+
+  function handleFileDragOver(evt: ReactDragEvent<HTMLDivElement>) {
+    if (!canAcceptFiles || !hasFilePayload(evt)) return;
+    evt.preventDefault();
+    evt.stopPropagation();
+    evt.dataTransfer.dropEffect = "copy";
+  }
+
+  function handleFileDragLeave(evt: ReactDragEvent<HTMLDivElement>) {
+    if (!canAcceptFiles || !hasFilePayload(evt)) return;
+    evt.preventDefault();
+    evt.stopPropagation();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setIsDragOver(false);
+  }
+
+  function handleFileDrop(evt: ReactDragEvent<HTMLDivElement>) {
+    if (!canAcceptFiles || !hasFilePayload(evt)) return;
+    evt.preventDefault();
+    evt.stopPropagation();
+    resetDragState();
+    void handleDroppedFiles(evt.dataTransfer?.files);
+  }
+
   const canSubmit = !submitting && !!body.trim();
 
   if (composerDisabledReason) {
@@ -2217,35 +2314,33 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
       ref={composerContainerRef}
       data-testid="issue-chat-composer"
       className={cn(
-        "relative rounded-md border border-border/70 bg-background/95 p-[15px] shadow-[0_-12px_28px_rgba(15,23,42,0.08)] backdrop-blur supports-[backdrop-filter]:bg-background/85 dark:shadow-[0_-12px_28px_rgba(0,0,0,0.28)]",
-        isDragOver && "ring-2 ring-primary/60 bg-accent/10",
+        "relative rounded-md border border-border/70 bg-background/95 p-[15px] shadow-[0_-12px_28px_rgba(15,23,42,0.08)] backdrop-blur transition-[border-color,background-color,box-shadow] duration-150 supports-[backdrop-filter]:bg-background/85 dark:shadow-[0_-12px_28px_rgba(0,0,0,0.28)]",
+        isDragOver && "border-primary/45 bg-background shadow-[0_-12px_28px_rgba(15,23,42,0.08),0_0_0_1px_hsl(var(--primary)/0.16)]",
       )}
-      onDragEnter={(evt) => {
-        if (!canAcceptFiles || !hasFilePayload(evt)) return;
-        dragDepthRef.current += 1;
-        setIsDragOver(true);
-      }}
-      onDragOver={(evt) => {
-        if (!canAcceptFiles || !hasFilePayload(evt)) return;
-        evt.preventDefault();
-        evt.dataTransfer.dropEffect = "copy";
-      }}
-      onDragLeave={() => {
-        if (!canAcceptFiles) return;
-        dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-        if (dragDepthRef.current === 0) setIsDragOver(false);
-      }}
-      onDrop={(evt) => {
-        if (!canAcceptFiles) return;
-        if (evt.defaultPrevented) {
-          resetDragState();
-          return;
-        }
-        evt.preventDefault();
-        resetDragState();
-        void handleDroppedFiles(evt.dataTransfer?.files);
-      }}
+      onDragEnterCapture={handleFileDragEnter}
+      onDragOverCapture={handleFileDragOver}
+      onDragLeaveCapture={handleFileDragLeave}
+      onDropCapture={handleFileDrop}
     >
+      {isDragOver && canAcceptFiles ? (
+        <div
+          data-testid="issue-chat-composer-drop-overlay"
+          className="pointer-events-none absolute inset-2 z-30 flex items-center justify-center rounded-sm border border-dashed border-primary/55 bg-background/75 px-4 py-3 text-center shadow-sm backdrop-blur-[2px] dark:bg-background/65"
+        >
+          <div className="flex max-w-md items-center gap-3 rounded-md bg-background/80 px-3 py-2 text-left shadow-sm ring-1 ring-border/60">
+            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <Paperclip className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-foreground">Drop to upload</div>
+              <div className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                Images insert into the reply. Other files are added to this issue.
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <MarkdownEditor
         ref={editorRef}
         value={body}
@@ -2254,13 +2349,59 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
         mentions={mentions}
         onSubmit={handleSubmit}
         imageUploadHandler={onImageUpload}
+        fileDropTarget="parent"
         bordered={false}
-        contentClassName="max-h-[28dvh] overflow-y-auto pr-1 text-sm scrollbar-auto-hide"
+        contentClassName="max-h-[28dvh] overflow-y-auto pr-1 pb-2 text-sm scrollbar-auto-hide"
       />
 
       {composerHint ? (
         <div className="inline-flex items-center rounded-full border border-border/70 bg-muted/30 px-2 py-1 text-[11px] text-muted-foreground">
           {composerHint}
+        </div>
+      ) : null}
+
+      {composerAttachments.length > 0 ? (
+        <div
+          data-testid="issue-chat-composer-attachments"
+          className="mb-3 mt-2 space-y-1.5 rounded-md border border-dashed border-border/80 bg-muted/20 p-2"
+        >
+          {composerAttachments.map((attachment) => {
+            const sizeLabel = formatAttachmentSize(attachment.size);
+            const statusLabel =
+              attachment.status === "uploading"
+                ? "Uploading to issue"
+                : attachment.status === "error"
+                  ? attachment.error ?? "Upload failed"
+                  : attachment.inline
+                    ? "Inserted inline"
+                    : "Attached to issue";
+            return (
+              <div
+                key={attachment.id}
+                className={cn(
+                  "flex min-w-0 items-center gap-2 rounded-sm px-2 py-1.5 text-xs",
+                  attachment.status === "error"
+                    ? "bg-destructive/10 text-destructive"
+                    : "bg-background/70 text-muted-foreground",
+                )}
+              >
+                {attachment.status === "uploading" ? (
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                ) : attachment.status === "attached" ? (
+                  <Check className="h-3.5 w-3.5 shrink-0 text-green-600 dark:text-green-400" />
+                ) : (
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                )}
+                <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+                  {attachment.name}
+                </span>
+                {sizeLabel ? (
+                  <span className="shrink-0 text-muted-foreground">{sizeLabel}</span>
+                ) : null}
+                <span className="shrink-0 text-muted-foreground">{statusLabel}</span>
+              </div>
+            );
+          })}
         </div>
       ) : null}
 
@@ -2270,7 +2411,6 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
             <input
               ref={attachInputRef}
               type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
               className="hidden"
               onChange={handleAttachFile}
             />
@@ -2279,7 +2419,7 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
               size="icon-sm"
               onClick={() => attachInputRef.current?.click()}
               disabled={attaching}
-              title="Attach image"
+              title="Attach file"
             >
               <Paperclip className="h-4 w-4" />
             </Button>

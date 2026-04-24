@@ -578,7 +578,7 @@ type IssueDetailChatTabProps = {
   ) => Promise<void>;
   onAdd: (body: string, reopen?: boolean, reassignment?: CommentReassignment) => Promise<void>;
   onImageUpload: (file: File) => Promise<string>;
-  onAttachImage: (file: File) => Promise<void>;
+  onAttachImage: (file: File) => Promise<IssueAttachment | void>;
   onInterruptQueued: (runId: string) => Promise<void>;
   onCancelQueued: (commentId: string) => void;
   interruptingQueuedRunId: string | null;
@@ -2543,7 +2543,7 @@ export function IssueDetail() {
     return attachment.contentPath;
   }, [uploadAttachment]);
   const handleCommentAttachImage = useCallback(async (file: File) => {
-    await uploadAttachment.mutateAsync(file);
+    return uploadAttachment.mutateAsync(file);
   }, [uploadAttachment]);
   const handleInterruptQueuedRun = useCallback(async (runId: string) => {
     await interruptQueuedComment.mutateAsync(runId);
@@ -3069,6 +3069,7 @@ export function IssueDetail() {
           className="text-[15px] leading-7 text-foreground"
           placeholder="Add a description..."
           multiline
+          foldable
           mentions={mentionOptions}
           imageUploadHandler={async (file) => {
             const attachment = await uploadAttachment.mutateAsync(file);

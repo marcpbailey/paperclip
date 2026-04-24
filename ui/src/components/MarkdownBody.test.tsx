@@ -119,6 +119,20 @@ describe("MarkdownBody", () => {
     expect(html).not.toContain("javascript:");
   });
 
+  it("renders raw HTML tags as escaped text", () => {
+    const html = renderMarkdown(
+      '<script>fetch("/api/secrets")</script>\n<iframe src="https://example.com"></iframe>\n<p onclick="steal()">Plain text</p>',
+    );
+
+    expect(html).not.toContain("<script>");
+    expect(html).not.toContain("<iframe");
+    expect(html).not.toContain("<p onclick");
+    expect(html).not.toContain('onclick="steal()"');
+    expect(html).toContain("&lt;script&gt;");
+    expect(html).toContain("onclick=&quot;steal()&quot;");
+    expect(html).toContain("Plain text");
+  });
+
   it("uses soft-break styling by default", () => {
     const html = renderMarkdown("First line\nSecond line");
 
