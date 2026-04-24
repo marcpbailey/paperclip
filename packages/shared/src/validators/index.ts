@@ -31,8 +31,10 @@ export {
   environmentLeaseCleanupStatusSchema,
   createEnvironmentSchema,
   updateEnvironmentSchema,
+  probeEnvironmentConfigSchema,
   type CreateEnvironment,
   type UpdateEnvironment,
+  type ProbeEnvironmentConfig,
 } from "./environment.js";
 export {
   feedbackDataSharingPreferenceSchema,

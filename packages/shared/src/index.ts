@@ -218,7 +218,9 @@ export type {
   Company,
   Environment,
   EnvironmentLease,
+  EnvironmentProbeResult,
   LocalEnvironmentConfig,
+  SshEnvironmentConfig,
   FeedbackVote,
   FeedbackDataSharingPreference,
   FeedbackTargetType,
@@ -541,6 +543,17 @@ export {
 } from "./execution-workspace-guards.js";
 
 export {
+  adapterSupportsRemoteManagedEnvironments,
+  getAdapterEnvironmentSupport,
+  getEnvironmentCapabilities,
+  isEnvironmentDriverSupportedForAdapter,
+  supportedEnvironmentDriversForAdapter,
+  type AdapterEnvironmentSupport,
+  type EnvironmentCapabilities,
+  type EnvironmentSupportStatus,
+} from "./environment-support.js";
+
+export {
   instanceGeneralSettingsSchema,
   patchInstanceGeneralSettingsSchema,
   type PatchInstanceGeneralSettings,
@@ -567,8 +580,10 @@ export {
   environmentLeaseCleanupStatusSchema,
   createEnvironmentSchema,
   updateEnvironmentSchema,
+  probeEnvironmentConfigSchema,
   type CreateEnvironment,
   type UpdateEnvironment,
+  type ProbeEnvironmentConfig,
   agentSkillStateSchema,
   agentSkillSyncModeSchema,
   agentSkillEntrySchema,

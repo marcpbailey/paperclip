@@ -8,12 +8,19 @@ import type { Db } from "@paperclipai/db";
 import {
   AGENT_DEFAULT_MAX_CONCURRENT_RUNS,
   ISSUE_CONTINUATION_SUMMARY_DOCUMENT_KEY,
+  isEnvironmentDriverSupportedForAdapter,
   type BillingType,
   type EnvironmentLeaseStatus,
   type ExecutionWorkspace,
   type ExecutionWorkspaceConfig,
   type RunLivenessState,
 } from "@paperclipai/shared";
+import {
+  ensureSshWorkspaceReady,
+  findReachablePaperclipApiUrlOverSsh,
+  type SshRemoteExecutionSpec,
+} from "@paperclipai/adapter-utils/ssh";
+import type { AdapterExecutionTarget } from "@paperclipai/adapter-utils/execution-target";
 import {
   agents,
   agentRuntimeState,
@@ -98,8 +105,10 @@ import {
   issueExecutionWorkspaceModeForPersistedWorkspace,
   parseIssueExecutionWorkspaceSettings,
   parseProjectExecutionWorkspacePolicy,
+  resolveExecutionWorkspaceEnvironmentId,
   resolveExecutionWorkspaceMode,
 } from "./execution-workspace-policy.js";
+import { resolveEnvironmentDriverConfigForRuntime } from "./environment-config.js";
 import { instanceSettingsService } from "./instance-settings.js";
 import {
   RUN_LIVENESS_CONTINUATION_REASON,
@@ -322,6 +331,27 @@ function leaseReleaseStatusForRunStatus(
   return status === "failed" || status === "timed_out" ? "failed" : "released";
 }
 
+function runtimeApiUrlCandidates() {
+  const candidates = [
+    process.env.PAPERCLIP_RUNTIME_API_URL,
+    process.env.PAPERCLIP_API_URL,
+    process.env.PUBLIC_BASE_URL,
+  ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+  const encoded = process.env.PAPERCLIP_RUNTIME_API_CANDIDATES_JSON;
+  if (!encoded) return candidates;
+  try {
+    const parsed = JSON.parse(encoded);
+    if (Array.isArray(parsed)) {
+      candidates.push(
+        ...parsed.filter((value): value is string => typeof value === "string" && value.trim().length > 0),
+      );
+    }
+  } catch {
+    logger.warn("Ignoring invalid PAPERCLIP_RUNTIME_API_CANDIDATES_JSON");
+  }
+  return candidates;
+}
+
 export function applyPersistedExecutionWorkspaceConfig(input: {
   config: Record<string, unknown>;
   workspaceConfig: ExecutionWorkspaceConfig | null;
@@ -391,9 +421,19 @@ export function buildRealizedExecutionWorkspaceFromPersisted(input: {
   };
 }
 
-function buildExecutionWorkspaceConfigSnapshot(config: Record<string, unknown>): Partial<ExecutionWorkspaceConfig> | null {
+function buildExecutionWorkspaceConfigSnapshot(
+  config: Record<string, unknown>,
+  environmentId?: string | null,
+): Partial<ExecutionWorkspaceConfig> | null {
   const strategy = parseObject(config.workspaceStrategy);
   const snapshot: Partial<ExecutionWorkspaceConfig> = {};
+  // Persist the resolved environment onto the workspace so reused sessions stay on the
+  // environment they were created against until the workspace itself is recreated/reset.
+  const hasExplicitEnvironmentSelection = environmentId !== undefined;
+
+  if (hasExplicitEnvironmentSelection) {
+    snapshot.environmentId = environmentId ?? null;
+  }
 
   if ("workspaceStrategy" in config) {
     snapshot.provisionCommand = typeof strategy.provisionCommand === "string" ? strategy.provisionCommand : null;
@@ -426,7 +466,7 @@ function buildExecutionWorkspaceConfigSnapshot(config: Record<string, unknown>):
     if (typeof value === "object") return Object.keys(value).length > 0;
     return true;
   });
-  return hasSnapshot ? snapshot : null;
+  return hasSnapshot || hasExplicitEnvironmentSelection ? snapshot : null;
 }
 
 function deriveRepoNameFromRepoUrl(repoUrl: string | null): string | null {
@@ -5061,7 +5101,15 @@ export function heartbeatService(db: Db) {
     const mergedConfig = issueAssigneeOverrides?.adapterConfig
       ? { ...persistedWorkspaceManagedConfig, ...issueAssigneeOverrides.adapterConfig }
       : persistedWorkspaceManagedConfig;
-    const configSnapshot = buildExecutionWorkspaceConfigSnapshot(mergedConfig);
+    const defaultEnvironment = await environmentsSvc.ensureLocalEnvironment(agent.companyId);
+    const selectedEnvironmentId = resolveExecutionWorkspaceEnvironmentId({
+      projectPolicy: projectExecutionWorkspacePolicy,
+      issueSettings: issueExecutionWorkspaceSettings,
+      workspaceConfig: existingExecutionWorkspace?.config ?? null,
+      agentDefaultEnvironmentId: agent.defaultEnvironmentId,
+      defaultEnvironmentId: defaultEnvironment.id,
+    });
+    const configSnapshot = buildExecutionWorkspaceConfigSnapshot(mergedConfig, selectedEnvironmentId);
     const executionRunConfig = stripWorkspaceRuntimeFromExecutionRunConfig(mergedConfig);
     const { resolvedConfig, secretKeys } = await resolveExecutionRunAdapterConfig({
       companyId: agent.companyId,
@@ -5294,26 +5342,105 @@ export function heartbeatService(db: Db) {
       })(),
     };
     context.paperclipWorkspaces = resolvedWorkspace.workspaceHints;
-    const localEnvironment = await environmentsSvc.ensureLocalEnvironment(agent.companyId);
+    const selectedEnvironment =
+      selectedEnvironmentId === defaultEnvironment.id
+        ? defaultEnvironment
+        : await environmentsSvc.getById(selectedEnvironmentId);
+    if (!selectedEnvironment || selectedEnvironment.companyId !== agent.companyId) {
+      throw notFound(`Environment "${selectedEnvironmentId}" not found.`);
+    }
+    if (selectedEnvironment.status !== "active") {
+      throw conflict(`Environment "${selectedEnvironment.name}" is not active.`);
+    }
+    if (!isEnvironmentDriverSupportedForAdapter(agent.adapterType, selectedEnvironment.driver)) {
+      throw conflict(
+        `Adapter "${agent.adapterType}" does not support "${selectedEnvironment.driver}" environments.`,
+      );
+    }
+
+    const selectedEnvironmentRuntimeConfig = await resolveEnvironmentDriverConfigForRuntime(
+      db,
+      agent.companyId,
+      selectedEnvironment,
+    );
+    let environmentProvider = selectedEnvironment.driver;
+    let environmentProviderLeaseId: string | null = null;
+    let environmentLeaseMetadata: Record<string, unknown> = {
+      driver: selectedEnvironment.driver,
+      executionWorkspaceMode: persistedExecutionWorkspace?.mode ?? effectiveExecutionWorkspaceMode,
+      cwd: executionWorkspace.cwd,
+    };
+    let executionTarget: AdapterExecutionTarget | null = null;
+    let remoteExecution: SshRemoteExecutionSpec | null = null;
+
+    if (selectedEnvironmentRuntimeConfig.driver === "ssh") {
+      const { remoteCwd } = await ensureSshWorkspaceReady(selectedEnvironmentRuntimeConfig.config);
+      const paperclipApiUrl = await findReachablePaperclipApiUrlOverSsh({
+        config: selectedEnvironmentRuntimeConfig.config,
+        candidates: runtimeApiUrlCandidates(),
+      });
+      remoteExecution = {
+        ...selectedEnvironmentRuntimeConfig.config,
+        remoteCwd,
+        paperclipApiUrl,
+      };
+      environmentProvider = "ssh";
+      environmentProviderLeaseId = `ssh://${selectedEnvironmentRuntimeConfig.config.username}@${selectedEnvironmentRuntimeConfig.config.host}:${selectedEnvironmentRuntimeConfig.config.port}${remoteCwd}`;
+      environmentLeaseMetadata = {
+        ...environmentLeaseMetadata,
+        host: selectedEnvironmentRuntimeConfig.config.host,
+        port: selectedEnvironmentRuntimeConfig.config.port,
+        username: selectedEnvironmentRuntimeConfig.config.username,
+        remoteWorkspacePath: selectedEnvironmentRuntimeConfig.config.remoteWorkspacePath,
+        remoteCwd,
+        paperclipApiUrl,
+      };
+    }
+
     const environmentLease = await environmentsSvc.acquireLease({
       companyId: agent.companyId,
-      environmentId: localEnvironment.id,
+      environmentId: selectedEnvironment.id,
       executionWorkspaceId: persistedExecutionWorkspace?.id ?? null,
       issueId: issueId ?? null,
       heartbeatRunId: run.id,
       leasePolicy: "ephemeral",
-      provider: "local",
-      metadata: {
-        driver: "local",
-        executionWorkspaceMode: persistedExecutionWorkspace?.mode ?? effectiveExecutionWorkspaceMode,
-        cwd: executionWorkspace.cwd,
-      },
+      provider: environmentProvider,
+      providerLeaseId: environmentProviderLeaseId,
+      metadata: environmentLeaseMetadata,
     });
+    if (remoteExecution) {
+      executionTarget = {
+        kind: "remote",
+        transport: "ssh",
+        environmentId: selectedEnvironment.id,
+        leaseId: environmentLease.id,
+        remoteCwd: remoteExecution.remoteCwd,
+        paperclipApiUrl: remoteExecution.paperclipApiUrl,
+        spec: remoteExecution,
+      };
+    }
     context.paperclipEnvironment = {
-      id: localEnvironment.id,
-      name: localEnvironment.name,
-      driver: localEnvironment.driver,
+      id: selectedEnvironment.id,
+      name: selectedEnvironment.name,
+      driver: selectedEnvironment.driver,
       leaseId: environmentLease.id,
+      ...(typeof environmentLease.metadata?.remoteCwd === "string"
+        ? {
+            remoteCwd: environmentLease.metadata.remoteCwd,
+            host:
+              typeof environmentLease.metadata?.host === "string"
+                ? environmentLease.metadata.host
+                : undefined,
+            port:
+              typeof environmentLease.metadata?.port === "number"
+                ? environmentLease.metadata.port
+                : undefined,
+            username:
+              typeof environmentLease.metadata?.username === "string"
+                ? environmentLease.metadata.username
+                : undefined,
+          }
+        : {}),
     };
     await logActivity(db, {
       companyId: agent.companyId,
@@ -5325,8 +5452,8 @@ export function heartbeatService(db: Db) {
       entityType: "environment_lease",
       entityId: environmentLease.id,
       details: {
-        environmentId: localEnvironment.id,
-        driver: localEnvironment.driver,
+        environmentId: selectedEnvironment.id,
+        driver: selectedEnvironment.driver,
         leasePolicy: environmentLease.leasePolicy,
         provider: environmentLease.provider,
         executionWorkspaceId: environmentLease.executionWorkspaceId,
@@ -5592,6 +5719,10 @@ export function heartbeatService(db: Db) {
         runtime: runtimeForAdapter,
         config: runtimeConfig,
         context,
+        executionTarget,
+        executionTransport: remoteExecution
+          ? { remoteExecution: remoteExecution as unknown as Record<string, unknown> }
+          : undefined,
         onLog,
         onMeta: onAdapterMeta,
         onSpawn: async (meta) => {

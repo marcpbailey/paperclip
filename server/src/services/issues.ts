@@ -30,6 +30,7 @@ import {
   defaultIssueExecutionWorkspaceSettingsForProject,
   gateProjectExecutionWorkspacePolicy,
   issueExecutionWorkspaceModeForPersistedWorkspace,
+  parseIssueExecutionWorkspaceSettings,
   parseProjectExecutionWorkspacePolicy,
 } from "./execution-workspace-policy.js";
 import { instanceSettingsService } from "./instance-settings.js";
@@ -2189,6 +2190,36 @@ export function issueService(db: Db) {
       };
 
       return dbOrTx === db ? db.transaction(runUpdate) : runUpdate(dbOrTx);
+    },
+
+    clearExecutionWorkspaceEnvironmentSelection: async (companyId: string, environmentId: string) => {
+      const rows = await db
+        .select({
+          id: issues.id,
+          executionWorkspaceSettings: issues.executionWorkspaceSettings,
+        })
+        .from(issues)
+        .where(eq(issues.companyId, companyId));
+
+      let cleared = 0;
+      for (const row of rows) {
+        const settings = parseIssueExecutionWorkspaceSettings(row.executionWorkspaceSettings);
+        if (settings?.environmentId !== environmentId) continue;
+
+        await db
+          .update(issues)
+          .set({
+            executionWorkspaceSettings: {
+              ...settings,
+              environmentId: null,
+            },
+            updatedAt: new Date(),
+          })
+          .where(eq(issues.id, row.id));
+        cleared += 1;
+      }
+
+      return cleared;
     },
 
     remove: (id: string) =>
