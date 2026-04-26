@@ -908,6 +908,7 @@ describe("IssueDetail", () => {
     await waitForAssertion(() => {
       expect(container.textContent).toContain("Subtree pause is active.");
       expect(mockIssuesListRender.mock.calls.at(-1)?.[0].issueBadgeById.get("child-1")).toBe("Paused");
+      expect(mockIssuesListRender.mock.calls.at(-1)?.[0].showProgressSummary).toBe(true);
     });
 
     const resumeButton = Array.from(container.querySelectorAll("button"))
