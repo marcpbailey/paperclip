@@ -74,6 +74,15 @@ import {
   modelProfiles as openCodeModelProfiles,
 } from "@paperclipai/adapter-opencode-local";
 import {
+  execute as openrouterLocalExecute,
+  testEnvironment as openrouterLocalTestEnvironment,
+} from "@paperclipai/adapter-openrouter-local/server";
+import {
+  agentConfigurationDoc as openrouterLocalAgentConfigurationDoc,
+  models as openrouterLocalModels,
+  modelProfiles as openrouterLocalModelProfiles,
+} from "@paperclipai/adapter-openrouter-local";
+import {
   execute as openclawGatewayExecute,
   testEnvironment as openclawGatewayTestEnvironment,
 } from "@paperclipai/adapter-openclaw-gateway/server";
@@ -308,6 +317,20 @@ const openCodeLocalAdapter: ServerAdapterModule = {
   agentConfigurationDoc: openCodeAgentConfigurationDoc,
 };
 
+const openrouterLocalAdapter: ServerAdapterModule = {
+  type: "openrouter_local",
+  execute: openrouterLocalExecute,
+  testEnvironment: openrouterLocalTestEnvironment,
+  sessionManagement: getAdapterSessionManagement("openrouter_local") ?? undefined,
+  models: openrouterLocalModels,
+  modelProfiles: openrouterLocalModelProfiles,
+  supportsLocalAgentJwt: true,
+  supportsInstructionsBundle: true,
+  instructionsPathKey: "instructionsFilePath",
+  requiresMaterializedRuntimeSkills: false,
+  agentConfigurationDoc: openrouterLocalAgentConfigurationDoc,
+};
+
 const piLocalAdapter: ServerAdapterModule = {
   type: "pi_local",
   execute: piExecute,
@@ -411,6 +434,7 @@ function registerBuiltInAdapters() {
     claudeLocalAdapter,
     codexLocalAdapter,
     openCodeLocalAdapter,
+    openrouterLocalAdapter,
     piLocalAdapter,
     cursorLocalAdapter,
     geminiLocalAdapter,
