@@ -4,6 +4,7 @@ import {
   DEFAULT_ISSUE_GRAPH_LIVENESS_AUTO_RECOVERY_LOOKBACK_HOURS,
   MAX_ISSUE_GRAPH_LIVENESS_AUTO_RECOVERY_LOOKBACK_HOURS,
   MIN_ISSUE_GRAPH_LIVENESS_AUTO_RECOVERY_LOOKBACK_HOURS,
+  AGENT_DECLARABLE_ORIGIN_KINDS,
   type IssueGraphLivenessAutoRecoveryPreview,
   type IssueGraphLivenessAutoRecoveryPreviewItem,
 } from "@paperclipai/shared";
@@ -36,6 +37,7 @@ import {
   RECOVERY_ORIGIN_KINDS,
   buildIssueGraphLivenessLeafKey,
   isStrandedIssueRecoveryOriginKind,
+  isAgentDeclarableOriginKind,
   parseIssueGraphLivenessIncidentKey,
 } from "./origins.js";
 import {
@@ -1332,6 +1334,7 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
     latestRun: LatestIssueRun;
     previousStatus: "todo" | "in_progress";
   }) {
+    if (isAgentDeclarableOriginKind(input.issue.originKind)) return null;
     if (isStrandedIssueRecoveryIssue(input.issue)) return null;
 
     const existing = await findOpenStrandedIssueRecoveryIssue(input.issue.companyId, input.issue.id);
@@ -1514,6 +1517,29 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
     latestRun: LatestIssueRun;
     comment: string;
   }) {
+    if (isAgentDeclarableOriginKind(input.issue.originKind)) {
+      await issuesSvc.update(input.issue.id, { status: "cancelled" });
+      await logActivity(db, {
+        companyId: input.issue.companyId,
+        actorType: "system",
+        actorId: "system",
+        agentId: null,
+        runId: null,
+        action: "issue.updated",
+        entityType: "issue",
+        entityId: input.issue.id,
+        details: {
+          identifier: input.issue.identifier,
+          status: "cancelled",
+          previousStatus: input.previousStatus,
+          source: "recovery.silent_cancel_declarable_origin",
+          latestRunId: input.latestRun?.id ?? null,
+          latestRunStatus: input.latestRun?.status ?? null,
+        },
+      });
+      return null;
+    }
+
     if (isStrandedIssueRecoveryIssue(input.issue)) {
       return escalateStrandedRecoveryIssueInPlace({
         issue: input.issue,
@@ -1845,7 +1871,10 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
         .where(
           and(
             isNull(issues.hiddenAt),
-            notInArray(issues.originKind, [RECOVERY_ORIGIN_KINDS.issueGraphLivenessEscalation]),
+            notInArray(issues.originKind, [
+              RECOVERY_ORIGIN_KINDS.issueGraphLivenessEscalation,
+              ...AGENT_DECLARABLE_ORIGIN_KINDS,
+            ]),
           ),
         ),
       db
@@ -1888,7 +1917,10 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
         .where(
           and(
             isNull(issues.hiddenAt),
-            notInArray(issues.originKind, [RECOVERY_ORIGIN_KINDS.issueGraphLivenessEscalation]),
+            notInArray(issues.originKind, [
+              RECOVERY_ORIGIN_KINDS.issueGraphLivenessEscalation,
+              ...AGENT_DECLARABLE_ORIGIN_KINDS,
+            ]),
             inArray(heartbeatRuns.status, [...EXECUTION_PATH_HEARTBEAT_RUN_STATUSES]),
           ),
         ),
