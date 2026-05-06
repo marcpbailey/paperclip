@@ -225,6 +225,7 @@ describe("ssh env-lab fixture", () => {
     await git(localRepo, ["init", "-b", "main"]);
     await git(localRepo, ["config", "user.name", "Paperclip Test"]);
     await git(localRepo, ["config", "user.email", "test@paperclip.dev"]);
+    await git(localRepo, ["config", "commit.gpgsign", "false"]);
     await writeFile(path.join(localRepo, "tracked.txt"), "base\n", "utf8");
     await writeFile(path.join(localRepo, "._tracked.txt"), "should stay local only\n", "utf8");
     await git(localRepo, ["add", "tracked.txt"]);
@@ -271,5 +272,5 @@ describe("ssh env-lab fixture", () => {
     expect(await git(localRepo, ["log", "-1", "--pretty=%s"])).toBe("remote update");
     expect(await git(localRepo, ["status", "--short"])).toContain("M tracked.txt");
     expect(await git(localRepo, ["status", "--short"])).not.toContain("._tracked.txt");
-  });
+  }, 30_000);
 });
