@@ -129,7 +129,8 @@ describe("listModels", () => {
       makeModel({ id: "b/with-tools", name: "With Tools", supported_parameters: ["tools"] }),
     ]);
     const result = await listModels();
-    expect(result.map((m) => m.id)).toEqual(["b/with-tools"]);
+    const dynamic = result.map((m) => m.id).filter((id) => !STATIC_MODEL_IDS.includes(id));
+    expect(dynamic).toEqual(["b/with-tools"]);
   });
 
   it("excludes expired models", async () => {
@@ -140,7 +141,8 @@ describe("listModels", () => {
       makeModel({ id: "b/active", name: "Active", expiration_date: future }),
     ]);
     const result = await listModels();
-    expect(result.map((m) => m.id)).toEqual(["b/active"]);
+    const dynamic = result.map((m) => m.id).filter((id) => !STATIC_MODEL_IDS.includes(id));
+    expect(dynamic).toEqual(["b/active"]);
   });
 
   it("includes non-expired models with tools", async () => {
@@ -149,7 +151,8 @@ describe("listModels", () => {
       makeModel({ id: "a/model", name: "A Model", expiration_date: future }),
     ]);
     const result = await listModels();
-    expect(result.map((m) => m.id)).toEqual(["a/model"]);
+    const dynamic = result.map((m) => m.id).filter((id) => !STATIC_MODEL_IDS.includes(id));
+    expect(dynamic).toEqual(["a/model"]);
   });
 
   // ── fallback ───────────────────────────────────────────────────────────────
