@@ -4,14 +4,17 @@ ADAPTER_DEPLOY := $(HOME)/Projects/linkcast/crew/paperclip/companies/linkcast/ad
 PROJECT       := paperclip-linkcast
 COMPOSE_FILES := -f docker/docker-compose.yml -f local/compose/paperclip-boot-linkcast.yaml
 
-.PHONY: all build-adapter sync-adapter build-container deploy-adapter deploy-container restart test help
+.PHONY: all build-adapter sync-adapter build-container deploy-adapter deploy-container restart test fulltest help
 
-test: ## Run the full pre-hand-off verification suite (Level 2 tests)
+test: ## Run the fast unit/integration test suite
+	pnpm vitest run packages/adapters/openrouter-agent packages/adapters/openrouter-external --passWithNoTests
+
+fulltest: ## Run the full pre-hand-off verification suite (Level 2 tests)
 	pnpm -r typecheck
 	pnpm test:run
 	pnpm build
 
-all: build-container build-adapter sync-adapter restart ## Full rebuild (container + adapter), sync, and restart
+all: build-container build-adapter sync-adapter restart test ## Full rebuild (container + adapter), sync, restart, and fast test
 
 build-container: ## Rebuild the server Docker image (no cache for app source layers)
 	docker compose -p $(PROJECT) $(COMPOSE_FILES) build \

@@ -24,7 +24,7 @@ while [[ "${1:-}" == -* ]]; do
   case "$1" in
     -v|--verbose) VERBOSE=true; shift ;;
     *)            echo "Unknown flag: $1" >&2
-                  echo "usage: $(basename "$0") [-v|--verbose] {start|stop|restart|teardown|status|logs|env|test|make [target...]}" >&2
+                  echo "usage: $(basename "$0") [-v|--verbose] {start|stop|restart|teardown|status|logs|env|test|fulltest|make [target...]}" >&2
                   exit 1 ;;
   esac
 done
@@ -239,7 +239,7 @@ print_env_summary() {
 
 usage() {
   cat >&2 <<EOF
-usage: $(basename "$0") [-v|--verbose] {start|stop|restart|teardown|status|logs [service]|env|version|test|make [target...]}
+usage: $(basename "$0") [-v|--verbose] {start|stop|restart|teardown|status|logs [service]|env|version|test|fulltest|make [target...]}
 
   -v, --verbose  Show environment summary on start/restart and log each
                  shell variable that is unset before invoking compose.
@@ -250,7 +250,8 @@ usage: $(basename "$0") [-v|--verbose] {start|stop|restart|teardown|status|logs 
   teardown  docker compose down (removes containers, KEEPS volumes).
   status    docker compose ps.
   logs      Tail logs (optional service name).
-  test      Run the full pre-hand-off verification suite (Level 2 tests).
+  test      Run the fast unit/integration test suite.
+  fulltest  Run the full pre-hand-off verification suite (Level 2 tests).
   env       Print env diagnostics: op:// refs by source, and the env block
             that each service will receive from compose (no secret values).
   version   Print version and build info: repo tag/sha, server package version,
@@ -501,6 +502,7 @@ case "${1:-}" in
   env)      env_diagnostics ;;
   version)  show_versions ;;
   test)     make -f local/Makefile test ;;
+  fulltest) make -f local/Makefile fulltest ;;
   make)     make -f local/Makefile "${@:2}" ;;
   *)        usage ;;
 esac
