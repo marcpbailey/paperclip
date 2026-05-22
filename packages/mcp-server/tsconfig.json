@@ -2,7 +2,12 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    "baseUrl": ".",
+    "paths": {
+      "@paperclipai/shared": ["../shared/dist/index.js"],
+      "@paperclipai/shared/*": ["../shared/dist/*"]
+    }
   },
   "include": ["src"]
 }
