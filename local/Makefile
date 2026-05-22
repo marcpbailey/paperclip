@@ -4,7 +4,12 @@ ADAPTER_DEPLOY := $(HOME)/Projects/linkcast/crew/paperclip/companies/linkcast/ad
 PROJECT       := paperclip-linkcast
 COMPOSE_FILES := -f docker/docker-compose.yml -f local/compose/paperclip-boot-linkcast.yaml
 
-.PHONY: all build-adapter sync-adapter build-container deploy-adapter deploy-container restart help
+.PHONY: all build-adapter sync-adapter build-container deploy-adapter deploy-container restart test help
+
+test: ## Run the full pre-hand-off verification suite (Level 2 tests)
+	pnpm -r typecheck
+	pnpm test:run
+	pnpm build
 
 all: build-container build-adapter sync-adapter restart ## Full rebuild (container + adapter), sync, and restart
 
