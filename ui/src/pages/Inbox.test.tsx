@@ -313,9 +313,13 @@ describe("Inbox toolbar", () => {
         </QueryClientProvider>,
       );
     });
-    await act(async () => {
-      await Promise.resolve();
-    });
+    // Wait for React Query to fetch and React to commit the render.
+    for (let i = 0; i < 50; i++) {
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 10));
+      });
+      if (container.querySelectorAll("[data-inbox-item]").length >= 2) break;
+    }
 
     const rows = container.querySelectorAll("[data-inbox-item]");
     expect(rows.length).toBeGreaterThanOrEqual(2);
