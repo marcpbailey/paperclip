@@ -1,0 +1,12 @@
+{
+  "showUnsupportedFiles": true,
+  "alwaysUpdateLinks": true,
+  "useMarkdownLinks": true,
+  "newFileLocation": "folder",
+  "focusNewTab": false,
+  "defaultViewMode": "preview",
+  "showInlineTitle": false,
+  "livePreview": true,
+  "propertiesInDocument": "hidden",
+  "communityPluginsEnabled": true
+}

@@ -1,0 +1,5 @@
+{
+  "format": "YYYY-MM-DD hh.mm",
+  "folder": "wiki/notes",
+  "template": "wiki/templates"
+}
