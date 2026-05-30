@@ -22,6 +22,7 @@ These are absolute prohibitions, not guidelines:
 4. **If you cannot create a probe issue via the API, stop.** Set your issue to `blocked`, post the API error, and exit. Do not simulate.
 5. **If `agent-list-reports.sh` returns an empty array, your subtree has no reports.** Post a no-op comment on your issue and set status to `done`. Do not invent reports.
 6. **Never retry a failed API call as if it succeeded.** Non-zero curl exit = hard stop.
+7. **Never poll in-process.** The adapter runs Claude as a one-shot process — there is no background thread. After creating probes, register them as blockers and exit with status `blocked`. Paperclip will re-wake this issue when the last blocker clears. Do not attempt to hold a polling loop within a single run.
 
 ## Protocol Steps
 
@@ -42,15 +43,22 @@ These are absolute prohibitions, not guidelines:
      --agent-name "<agentName>" \
      --parent "$PAPERCLIP_TASK_ID"
    ```
-   Record `(agentName, issueIdentifier)` for each. The script prints the identifier on the first line of stdout.
+   Record `(agentName, probeIdentifier, probeId)` for each — the identifier is on the first line of stdout, the full JSON (including `id`) follows.
    If any creation fails, set status `blocked` naming the failed agent, and exit.
 
-4. **Poll each probe to completion.**
-   For each probe identifier, run:
+   Once all probes are created, register them as blockers and suspend:
    ```
-   ${SKILL_SOURCE}/../agent-delegate/scripts/agent-poll-issue.sh <identifier> 600 30
+   ${SKILL_SOURCE}/../agent-delegate/scripts/agent-update-issue.sh \
+     "$PAPERCLIP_TASK_ID" \
+     --add-blocked-by "<probeId1>,<probeId2>,..." \
+     --status blocked
    ```
-   If a probe times out (exit 1) → mark that agent `unresponsive`. Continue polling all others — do not abort.
+   Then exit. Paperclip will re-wake this issue when all probe blockers resolve.
+
+4. **On re-wake, verify probe outcomes.**
+   When re-woken (blockers cleared), fetch each probe identifier via the API and record its final `status`, `startedAt`, and `completedAt`.
+   - `done` → ✅ responsive; latency = `completedAt − startedAt`
+   - `cancelled` or any non-`done` terminal status → ❌ unresponsive
 
 5. **Post results to the triggering issue.**
    Run `${SKILL_SOURCE}/../agent-delegate/scripts/agent-comment.sh "$PAPERCLIP_TASK_ID" "<table>"` with a markdown table exactly like:
@@ -68,7 +76,8 @@ These are absolute prohibitions, not guidelines:
 
 6. **Set own issue status.**
    - All probes resolved (even some unresponsive) → `done`
-   - Hard API error in step 3 or 4 that blocked completion → `blocked`
+   - Hard API error in step 3 that blocked probe creation → `blocked`
+   - Do not explicitly clear the probe blockers before setting `done` — they are already resolved by the time this run is triggered.
 
 ## Probe Description (what you tell the subordinate)
 

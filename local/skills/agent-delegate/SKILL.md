@@ -7,7 +7,7 @@ description: >
   create issue, poll to completion, add comment, update status.
 ---
 
-# Agent Delegation
+# SKILL
 
 Use this skill whenever you need to create issues for your direct reports, wait for
 results, or post outcomes back to a parent issue. All operations MUST use the
