@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   extractClaudeRetryNotBefore,
   isClaudeTransientUpstreamError,
+  isClaudeThinkingBlockError,
 } from "./parse.js";
 
 describe("isClaudeTransientUpstreamError", () => {
@@ -119,5 +120,81 @@ describe("extractClaudeRetryNotBefore", () => {
     expect(
       extractClaudeRetryNotBefore({ errorMessage: "Overloaded. Try again later." }, new Date()),
     ).toBeNull();
+  });
+});
+
+describe("isClaudeThinkingBlockError", () => {
+  it("returns true for the exact production error string observed in LINAA-729", () => {
+    expect(
+      isClaudeThinkingBlockError({
+        is_error: true,
+        subtype: "success",
+        result:
+          "Claude run failed: subtype=success: API Error: 400 messages.3.content.8: thinking or redacted_thinking blocks in the latest assistant message cannot be modified. These blocks must remain as they were in the original response.",
+      }),
+    ).toBe(true);
+  });
+
+  it("returns true when the error appears in the errors array", () => {
+    expect(
+      isClaudeThinkingBlockError({
+        is_error: true,
+        errors: [
+          {
+            message:
+              "thinking blocks in the latest assistant message cannot be modified",
+          },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it("returns true for redacted_thinking variant", () => {
+    expect(
+      isClaudeThinkingBlockError({
+        is_error: true,
+        result:
+          "API Error: 400 redacted_thinking blocks in the latest assistant message cannot be modified.",
+      }),
+    ).toBe(true);
+  });
+
+  it("returns false for rate-limit errors", () => {
+    expect(
+      isClaudeThinkingBlockError({
+        is_error: true,
+        errors: [{ type: "rate_limit_error", message: "Rate limit reached for requests." }],
+      }),
+    ).toBe(false);
+  });
+
+  it("returns false for unknown-session errors", () => {
+    expect(
+      isClaudeThinkingBlockError({
+        result: "No conversation found with session id abc-123",
+      }),
+    ).toBe(false);
+  });
+
+  it("returns false for unrelated errors", () => {
+    expect(
+      isClaudeThinkingBlockError({
+        result: "API Error: 400 Invalid request",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("isClaudeTransientUpstreamError — thinking-block exclusion", () => {
+  it("does not classify a thinking-block 400 as transient", () => {
+    expect(
+      isClaudeTransientUpstreamError({
+        parsed: {
+          is_error: true,
+          result:
+            "Claude run failed: subtype=success: API Error: 400 messages.3.content.8: thinking or redacted_thinking blocks in the latest assistant message cannot be modified. These blocks must remain as they were in the original response.",
+        },
+      }),
+    ).toBe(false);
   });
 });

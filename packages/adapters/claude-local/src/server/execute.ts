@@ -48,6 +48,7 @@ import {
   isClaudeMaxTurnsResult,
   isClaudeTransientUpstreamError,
   isClaudeUnknownSessionError,
+  isClaudeThinkingBlockError,
 } from "./parse.js";
 import { prepareClaudeConfigSeed } from "./claude-config.js";
 import { resolveClaudeDesiredSkillNames } from "./skills.js";
@@ -839,6 +840,20 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       await onLog(
         "stdout",
         `[paperclip] Claude resume session "${sessionId}" is unavailable; retrying with a fresh session.\n`,
+      );
+      const retry = await runAttempt(null);
+      return toAdapterResult(retry, { fallbackSessionId: null, clearSessionOnMissingSession: true });
+    }
+
+    if (
+      sessionId &&
+      !initial.proc.timedOut &&
+      initial.parsed &&
+      isClaudeThinkingBlockError(initial.parsed)
+    ) {
+      await onLog(
+        "stdout",
+        `[paperclip] Claude session "${sessionId}" contains unresumable thinking blocks; retrying with a fresh session.\n`,
       );
       const retry = await runAttempt(null);
       return toAdapterResult(retry, { fallbackSessionId: null, clearSessionOnMissingSession: true });
