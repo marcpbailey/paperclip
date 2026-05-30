@@ -196,6 +196,24 @@ export function isClaudeUnknownSessionError(parsed: Record<string, unknown>): bo
   );
 }
 
+const CLAUDE_THINKING_BLOCK_RE =
+  /(?:thinking|redacted_thinking)\s+blocks?\s+in\s+the\s+latest\s+assistant\s+message\s+cannot\s+be\s+modified/i;
+
+/**
+ * Returns true when the Anthropic API rejected a session resume with HTTP 400
+ * because the previous assistant turn contained thinking or redacted_thinking
+ * blocks that can no longer be replayed. The adapter should discard the
+ * session and retry with a fresh session.
+ */
+export function isClaudeThinkingBlockError(parsed: Record<string, unknown>): boolean {
+  const resultText = asString(parsed.result, "").trim();
+  const allMessages = [resultText, ...extractClaudeErrorMessages(parsed)]
+    .map((msg) => msg.trim())
+    .filter(Boolean);
+
+  return allMessages.some((msg) => CLAUDE_THINKING_BLOCK_RE.test(msg));
+}
+
 function buildClaudeTransientHaystack(input: {
   parsed?: Record<string, unknown> | null;
   stdout?: string | null;
@@ -375,7 +393,14 @@ export function isClaudeTransientUpstreamError(input: {
 }): boolean {
   const parsed = input.parsed ?? null;
   // Deterministic failures are handled by their own classifiers.
-  if (parsed && (isClaudeMaxTurnsResult(parsed) || isClaudeUnknownSessionError(parsed))) {
+  if (
+    parsed &&
+    (
+      isClaudeMaxTurnsResult(parsed) ||
+      isClaudeUnknownSessionError(parsed) ||
+      isClaudeThinkingBlockError(parsed)
+    )
+  ) {
     return false;
   }
   const loginMeta = detectClaudeLoginRequired({
