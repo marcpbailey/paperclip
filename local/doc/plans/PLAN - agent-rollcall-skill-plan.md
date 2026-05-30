@@ -1,4 +1,4 @@
-# Skill: `agent-rollcall`
+# PLAN - agent-rollcall-skill-plan
 
 Create a new skill at `skills/agent-rollcall/` in the Paperclip repo.
 

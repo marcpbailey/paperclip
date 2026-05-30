@@ -1,4 +1,4 @@
-# Agent-Declarable Origin Kind
+# PLAN - agent-declarable-origin-kind
 
 Status: Planned
 Owner: Server + Shared + Skills

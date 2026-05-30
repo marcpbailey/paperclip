@@ -1,4 +1,4 @@
-# Refactor openrouter-local → openrouter-agent (standalone npm package)
+# PROMPT openrouter-agent-extraction
 
 Refactor the `openrouter-local` adapter in `/Users/marc/Projects/paperclip` to be renamed `openrouter-agent` and extracted as a standalone, externally-loadable npm package.
 

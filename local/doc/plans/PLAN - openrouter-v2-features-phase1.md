@@ -1,4 +1,4 @@
-# Implementation Prompt: openrouter-local Features 1–4 (Phase 1)
+# PLAN - openrouter-v2-features-phase1
 
 **Repo:** `/Users/marc/Projects/paperclip`  
 **Branch:** `feat/openrouter-local-adapter`  

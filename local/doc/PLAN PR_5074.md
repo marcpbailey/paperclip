@@ -1,4 +1,4 @@
-# PR #5074 — Honor custom labels from external adapter modules
+# PLAN PR_5074
 
 **Status as of 2026-05-04:** open, awaiting review at https://github.com/paperclipai/paperclip/pull/5074
 

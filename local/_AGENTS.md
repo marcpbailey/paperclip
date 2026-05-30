@@ -1,4 +1,4 @@
-# AGENTS-local.md
+# _AGENTS
 
 Local overrides and security requirements for the LinkCast environment.
 

@@ -1,4 +1,4 @@
-# Implement skill sync in `openrouter-local` adapter
+# PLAN - openrouter-local-skill-sync-plan
 
 **Branch:** `feat/openrouter-local-adapter` (active development branch — do not create a new branch)
 

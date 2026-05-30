@@ -59,3 +59,5 @@ tests/release-smoke/playwright-report/
 .superpowers/
 .claude/worktrees/
 .herenow
+.env.swp
+local/bin/__pycache__/paperclip-agentmodels.cpython-314.pyc

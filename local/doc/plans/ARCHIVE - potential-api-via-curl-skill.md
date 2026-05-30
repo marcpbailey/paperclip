@@ -1,4 +1,8 @@
-# Control Plane curl Instructions for `openrouter-local`
+# ARCHIVE - potential-api-via-curl-skill
+
+
+> [!Obsolete] 
+> This predates our paperclip-api.sh and the deployment of the vanilla paperclip mcp server. No longer required.
 
 The `openrouter-local` adapter supports models that may lack native OpenAI tool-calling support. When they do, agents waste tokens discovering how to interact with the Paperclip API. Pre-injecting explicit `curl` instructions eliminates that overhead.
 

@@ -1,4 +1,4 @@
-# Security & Best Practice Critique: `paperclip-control.sh`
+# #REVIEW security-critique
 
 ## Verdict
 
@@ -10,13 +10,13 @@ The script is **excellently designed** for a single-operator dev/staging context
 
 `.envrc` contains a **raw 1Password service account token** — the credential that unlocks the `openclaw` vault. The token cannot itself be stored behind 1Password (it _is_ the bootstrap credential).
 
-| Control | Status |
-|---|---|
-| `.envrc` in `.gitignore` | ✅ Ignored |
-| `.envrc` tracked by git | ✅ Not tracked |
-| `.envrc` file permissions | ✅ `0600` |
-| Token rotation | ✅ 3-month expiry |
-| Token scope | ✅ Scoped to `openclaw` vault only |
+| Control                   | Status                            |
+| ------------------------- | --------------------------------- |
+| `.envrc` in `.gitignore`  | ✅ Ignored                         |
+| `.envrc` tracked by git   | ✅ Not tracked                     |
+| `.envrc` file permissions | ✅ `0600`                          |
+| Token rotation            | ✅ 3-month expiry                  |
+| Token scope               | ✅ Scoped to `openclaw` vault only |
 
 > [!NOTE]
 > **Optional hardening**: The token could be stored in the macOS Keychain instead of a file:
@@ -39,21 +39,21 @@ The script is **excellently designed** for a single-operator dev/staging context
 
 ## 🟢 Things Done Well
 
-| Practice | Implementation |
-|---|---|
-| **Secrets never on disk** | `op run` resolves `op://` URIs in-process; the script never writes resolved values |
-| **Strong Env Isolation** | `env -i` wipes the environment before `op run` and `docker compose`, passing only whitelisted vars |
-| **Whitelist vs Blacklist** | Moved from "stripping known keys" to "denying all by default"—prevents host-env leakage |
-| **Stray op:// Immunity** | `env -i` renders `op run` physically incapable of seeing (and failing on) stray host-shell secrets |
-| **Dual-mode Orchestration** | `with_secrets` for start/restart, `without_secrets` (also isolated) for status/logs — minimal exposure |
-| **Compose `:?` isolation** | `BETTER_AUTH_SECRET:?` handled per-path — dummy for stop, pre-flight check for start |
-| **Authoritative `.envrc` source** | Always sourced — overrides any inherited token from a different 1Password account |
-| **`.env`/`.envrc` gitignored** | Neither is tracked; both are in `.gitignore` |
-| **File permissions** | Both `.env` and `.envrc` set to `0600` |
-| **Token scoping** | Service account scoped to `openclaw` vault only, 3-month expiry |
-| **`set -euo pipefail`** | Fail-fast on errors, undefined vars, and pipe failures |
-| **Verbose mode** | Debug output gated behind `-v` — no secret leakage in normal operation |
-| **Value redaction** | Sensitive-looking keys show `prefix••••suffix` in verbose output for disambiguation without exposure |
+| Practice                          | Implementation                                                                                         |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| **Secrets never on disk**         | `op run` resolves `op://` URIs in-process; the script never writes resolved values                     |
+| **Strong Env Isolation**          | `env -i` wipes the environment before `op run` and `docker compose`, passing only whitelisted vars     |
+| **Whitelist vs Blacklist**        | Moved from "stripping known keys" to "denying all by default"—prevents host-env leakage                |
+| **Stray op:// Immunity**          | `env -i` renders `op run` physically incapable of seeing (and failing on) stray host-shell secrets     |
+| **Dual-mode Orchestration**       | `with_secrets` for start/restart, `without_secrets` (also isolated) for status/logs — minimal exposure |
+| **Compose `:?` isolation**        | `BETTER_AUTH_SECRET:?` handled per-path — dummy for stop, pre-flight check for start                   |
+| **Authoritative `.envrc` source** | Always sourced — overrides any inherited token from a different 1Password account                      |
+| **`.env`/`.envrc` gitignored**    | Neither is tracked; both are in `.gitignore`                                                           |
+| **File permissions**              | Both `.env` and `.envrc` set to `0600`                                                                 |
+| **Token scoping**                 | Service account scoped to `openclaw` vault only, 3-month expiry                                        |
+| **`set -euo pipefail`**           | Fail-fast on errors, undefined vars, and pipe failures                                                 |
+| **Verbose mode**                  | Debug output gated behind `-v` — no secret leakage in normal operation                                 |
+| **Value redaction**               | Sensitive-looking keys show `prefix••••suffix` in verbose output for disambiguation without exposure   |
 
 ---
 

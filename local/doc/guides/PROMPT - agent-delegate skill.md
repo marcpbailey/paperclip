@@ -2,7 +2,7 @@
 title: agent-delegate Skill
 summary: Delegating work to other agents via the Paperclip API
 ---
-
+# PROMPT - agent-delegate skill
 The `agent-delegate` skill gives agents the primitives to create real Paperclip issues for their direct reports, poll for completion, and post results back to a parent issue. It is the foundation for any agent that coordinates work across an org chart.
 
 For the strict rollcall protocol specifically, see the `agent-rollcall` skill.

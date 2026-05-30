@@ -1,4 +1,5 @@
-# Plan: Enable Instruction Bundles for OpenAI/OpenRouter Adapter
+# PLAN - openrouter-instruction-bundles
+## Enable Instruction Bundles for OpenAI/OpenRouter Adapter
 
 To allow LinkCast agents to use local instruction bundles (`AGENTS.md`), the `openai` adapter must claim the `supportsInstructionsBundle` capability. 
 

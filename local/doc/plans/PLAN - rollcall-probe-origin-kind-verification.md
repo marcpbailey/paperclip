@@ -1,6 +1,6 @@
-# Verification Report: Rolecall Probe Origin Kind Implementation
+# PLAN - rollcall-probe-origin-kind-verification
 
-This document verifies the successful implementation and stabilization of the `rollcall_probe` origin kind and the associated recovery infrastructure hardening, as outlined in [2026-05-05-rollcall-probe-origin-kind.md](./2026-05-05-rollcall-probe-origin-kind.md).
+This document verifies the successful implementation and stabilization of the `rollcall_probe` origin kind and the associated recovery infrastructure hardening, as outlined in [](local/doc/plans/#PLAN%20-%20rollcall-probe-origin-kind.md)
 
 ## 1. Implementation Summary
 

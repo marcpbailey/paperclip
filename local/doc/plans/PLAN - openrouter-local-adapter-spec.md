@@ -1,4 +1,4 @@
-# Mission: Create `openrouter-local` Adapter
+# PLAN - openrouter-local-adapter-spec
 
 ## Objective
 
