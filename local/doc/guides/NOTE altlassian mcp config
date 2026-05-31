@@ -1,0 +1,14 @@
+"atlassian": {
+  "command": "npx",
+  "args": [
+    "-y",
+    "@sooperset/mcp-atlassian"
+  ],
+  "env": {
+    "JIRA_URL": "https://linkcast.atlassian.net",
+    "JIRA_USERNAME": "marc@linkcast.tv",
+    "JIRA_API_TOKEN": "PLACEHOLDER_ATLASSIAN_API_TOKEN",
+    "CONFLUENCE_URL": "https://linkcast.atlassian.net/wiki"
+  },
+  "disabled": true
+}
