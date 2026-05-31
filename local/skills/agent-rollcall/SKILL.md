@@ -2,15 +2,32 @@
 name: agent-rollcall
 description: >
   Execute a recursive org-chart health check by creating real probe issues
-  for each direct report and polling the API for completion. Use when asked
-  to perform a rollcall, health check, or responsiveness audit of your subtree.
-  Requires agent-delegate skill. Never simulate — every result must come from
-  the API.
+  for each direct report. Use when asked to perform a rollcall, health check,
+  or responsiveness audit of your subtree. Requires agent-delegate skill.
+  Never simulate — every result must come from the API.
 ---
 
 # Agent Rollcall Protocol
 
 This protocol is a strict, non-negotiable health check of your direct reports and their subtrees.
+
+## TL;DR — The Entire Procedure
+
+Run the orchestration script **once**:
+
+```bash
+bash "/app/skills/agent-rollcall/scripts/agent-rollcall.sh"
+```
+
+That is the complete procedure. Do **not**:
+- list reports yourself
+- create probes yourself
+- register blockers yourself
+- poll or wait in-process
+- read scratch files from `/tmp`
+- run any other rollcall command
+
+The script is **idempotent and re-entrant**: safe to call on every re-wake. It detects current state (no reports / probes pending / all done) and performs exactly the right action, then exits.
 
 ## Hard Rules
 
@@ -18,74 +35,55 @@ These are absolute prohibitions, not guidelines:
 
 1. **A file on disk is not a rollcall result.** Writing markdown files to the workspace and treating them as probe results is fabrication. Stop and report blocked instead.
 2. **A comment saying "I believe X is responsive" is not a rollcall result.** Only a real `done` status from the API counts.
-3. **Every rollcall is a fresh-start diagnostic.** Do not search for or use data from previous rollcalls, old probe issues, or historical activity logs as evidence. You must create NEW probe issues for every report, every time.
-4. **If you cannot create a probe issue via the API, stop.** Set your issue to `blocked`, post the API error, and exit. Do not simulate.
-5. **If `agent-list-reports.sh` returns an empty array, your subtree has no reports.** Post a no-op comment on your issue and set status to `done`. Do not invent reports.
-6. **Never retry a failed API call as if it succeeded.** Non-zero curl exit = hard stop.
-7. **Never poll in-process.** The adapter runs Claude as a one-shot process — there is no background thread. After creating probes, register them as blockers and exit with status `blocked`. Paperclip will re-wake this issue when the last blocker clears. Do not attempt to hold a polling loop within a single run.
+3. **Every rollcall is a fresh-start diagnostic.** Do not search for or use data from previous rollcalls, old probe issues, or historical activity logs as evidence. The script creates NEW probe issues every time (it uses `parentId=$TASK_ID` scoping so old probes from a different rollcall are never reused).
+4. **If the script exits non-zero, stop.** Set your issue to `blocked`, post the error output, and exit. Do not simulate.
+5. **Never retry a failed API call as if it succeeded.** Non-zero curl exit = hard stop.
+6. **Never poll in-process.** The script registers blockers and exits — that *is* the wait. Paperclip re-wakes this issue when all blockers clear.
+7. **Do not improvise orchestration.** Use only `agent-rollcall.sh`. Do not write your own bash orchestrator, do not call probe-creation scripts directly, do not invent loops.
+8. **Use the exact environment variable names.** The API variables are `PAPERCLIP_API_URL` and `PAPERCLIP_API_KEY` — not `PAPERCLIP_API_BASE`, `PAPERCLIP_API_TOKEN`, or any other guess.
+9. **Trust the tool-output channel — do not test it.** Command output may arrive **batched or delayed**: a script can appear to produce no output and then flush later. This is normal, not a failure. Do **not** probe the channel with `echo`/marker/test-file commands, and do **not** re-run a command just because its output looked empty. The only real failure signal is a non-zero exit code.
 
-## Protocol Steps
+## How the Script Works
 
-1. **Confirm identity.**
-   Call `GET $PAPERCLIP_API_URL/api/agents/me` and verify the returned `id` matches `PAPERCLIP_AGENT_ID`.
-   If the env var is unset, stop immediately with status `blocked`.
+The script (`agent-rollcall.sh`) runs through this state machine in a single invocation:
 
-2. **Get direct reports.**
-   Run `${SKILL_SOURCE}/../agent-delegate/scripts/agent-list-reports.sh`.
-   - If the array is empty → post a no-op comment, set status `done`, exit.
-   - If the API call fails → set status `blocked`, post the error, exit.
+| State | Condition | Action |
+|---|---|---|
+| A — leaf | No direct reports | Post no-op comment, set `done`, exit |
+| B — first run | No probes for my task yet | Create one probe per report (via idempotent `agent-rollcall-probe.sh`), register all as blockers declaratively, set `blocked`, exit |
+| C — re-wake pending | Probes exist, not all terminal | Re-register blockers (repairs mis-registration), set `blocked`, exit |
+| D — finalize | All probes terminal | Post results table, set `done`, exit |
 
-3. **Create one probe issue per report.**
-   For each report, run:
-   ```
-   ${SKILL_SOURCE}/scripts/agent-rollcall-probe.sh \
-     --agent-id <agentId> \
-     --agent-name "<agentName>" \
-     --parent "$PAPERCLIP_TASK_ID"
-   ```
-   Record `(agentName, probeIdentifier, probeId)` for each — the identifier is on the first line of stdout, the full JSON (including `id`) follows.
-   If any creation fails, set status `blocked` naming the failed agent, and exit.
+Key properties:
+- **Scoped probe lookup**: uses `parentId=$TASK_ID&originKind=rollcall_probe` — never a broad query, never cross-contamination from sibling subtrees.
+- **Ids stay local**: probe ids captured as local variables during creation, never re-discovered from a broad query.
+- **Declarative blockers**: uses `--set-blocked-by` to set the exact blocker set in one PATCH — repairs wrong blockers from any prior mis-registration.
+- **Register-and-exit**: always exits after registering blockers; never sleeps, never schedules a wakeup, never holds the process open.
+- **Live cost updates**: active run costs are not saved to the DB until the run process exits. When collating child results (State D), the script scrapes the rows from child comments but queries the API directly for the latest live cost of each probe rather than using the zero/stale cost values recorded in the comments.
 
-   Once all probes are created, register them as blockers and suspend:
-   ```
-   ${SKILL_SOURCE}/../agent-delegate/scripts/agent-update-issue.sh \
-     "$PAPERCLIP_TASK_ID" \
-     --add-blocked-by "<probeId1>,<probeId2>,..." \
-     --status blocked
-   ```
-   Then exit. Paperclip will re-wake this issue when all probe blockers resolve.
+## Results Table Format
 
-4. **On re-wake, verify probe outcomes.**
-   When re-woken (blockers cleared), fetch each probe identifier via the API and record its final `status`, `startedAt`, and `completedAt`.
-   - `done` → ✅ responsive; latency = `completedAt − startedAt`
-   - `cancelled` or any non-`done` terminal status → ❌ unresponsive
+On finalize (State D), the script posts a table using **pickup latency** as the responsiveness metric and including cost tracking:
 
-5. **Post results to the triggering issue.**
-   Run `${SKILL_SOURCE}/../agent-delegate/scripts/agent-comment.sh "$PAPERCLIP_TASK_ID" "<table>"` with a markdown table exactly like:
+```markdown
+## Rollcall Results
 
-   ```markdown
-   ## Rollcall Results
+| Agent | Probe | Pickup Latency | Tokens (In/Cached/Out) | Cost | Errors |
+|---|---|---|---|---|---|
+| Natasha | [LINAA-42](/LINAA/issues/LINAA-42) | 1s | 1200/400/300 | $0.4200 | - |
+| Stark   | [LINAA-43](/LINAA/issues/LINAA-43) | — | 0/0/0 | $0.0000 | cancelled |
+| **Total** | | | **1200/400/300** | **$0.4200** | |
+```
 
-   | Agent | Probe | Status | Latency |
-   |---|---|---|---|
-   | Natasha | [LINAA-42](/LINAA/issues/LINAA-42) | ✅ responsive | 47s |
-   | Stark   | [LINAA-43](/LINAA/issues/LINAA-43) | ❌ unresponsive (timeout) | — |
-   ```
+- **Pickup Latency** = `startedAt − createdAt` (seconds) — measures chain-of-command responsiveness. Healthy value: ~1 s. This is the "seconds" signal the rollcall is designed to produce.
+- **Tokens (In/Cached/Out)** = aggregated input tokens, cached input tokens, and output tokens.
+- **Cost** = total notional/estimated API spend (or billed cost fallback) for this probe issue and all its descendants.
+- **Errors** = exceptional statuses (populated with `-` when a run is nominal, otherwise indicating the error condition, e.g. `cancelled` or other failure states).
+- `completedAt − startedAt` (subtree runtime, minutes) is **not** reported as latency — it measures the whole recursive subtree, not the agent's own responsiveness.
 
-   Every row must have a real probe identifier from step 3 and a real status from step 4. No row may be fabricated.
+## On Re-Wake
 
-6. **Set own issue status.**
-   - All probes resolved (even some unresponsive) → `done`
-   - Hard API error in step 3 that blocked probe creation → `blocked`
-   - Do not explicitly clear the probe blockers before setting `done` — they are already resolved by the time this run is triggered.
-
-## Probe Description (what you tell the subordinate)
-
-The probe issue description must say exactly this (fill in agent name):
-
-> Perform a recursive rollcall of your **direct reports** using the **`agent-rollcall`** skill. 
->
-> This is a fresh-start diagnostic: **disregard all previous rollcall history, past comments, and old probe results.** Follow the protocol in your skill's `SKILL.md` strictly. If you have no direct reports, set this issue to `done` immediately to confirm you are operational.
+When Paperclip re-wakes this issue (all probe blockers resolved), run the same command again — the script detects all-terminal state and finalizes automatically.
 
 ## Environment
 
@@ -95,5 +93,5 @@ The probe issue description must say exactly this (fill in agent name):
 | `PAPERCLIP_API_KEY` | Bearer token |
 | `PAPERCLIP_AGENT_ID` | Your agent UUID |
 | `PAPERCLIP_COMPANY_ID` | Your company UUID |
-| `PAPERCLIP_TASK_ID` | Current issue ID (use as probe parent and results target) |
-| `SKILL_SOURCE` | Absolute path to this skill directory (injected by adapter) |
+| `PAPERCLIP_TASK_ID` | Current issue ID (used as probe parent and results target) |
+| `PAPERCLIP_RUN_ID` | Current run ID (attached to mutating requests) |
