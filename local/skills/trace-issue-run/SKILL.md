@@ -1,8 +1,8 @@
 ---
 name: trace-issue-run
 description: >
-  Diagnose a Paperclip agent run by fetching issue and transcript data using
-  the Paperclip MCP server. Use when given a Paperclip issue URL and asked to explain
+  Diagnose a Paperclip agent run by fetching issue and transcript data from
+  the local API. Use when given a Paperclip issue URL and asked to explain
   what an agent did, why it stalled, or what went wrong. Performs the full
   diagnostic sequence: issue fetch → runs list → transcript parse → comment
   review → child issue traversal.
@@ -10,12 +10,30 @@ description: >
 
 # Trace Issue Run
 
-Given one or more Paperclip issue URLs, pull the full run trace using the Paperclip MCP tools and produce a structured diagnosis.
+Given one or more Paperclip issue URLs, pull the full run trace and produce a structured diagnosis.
+
+## API access — method priority
+
+All API calls **must** use one of the following two methods. Never use raw `curl`.
+
+### Primary: `paperclip-api.sh`
+
+Use the Bash tool to call `~/Projects/paperclip/local/bin/paperclip-api.sh`:
+
+```bash
+~/Projects/paperclip/local/bin/paperclip-api.sh GET /api/issues/{IDENTIFIER}
+```
+
+This script handles 1Password secret injection (`op run`) so the API key is never exposed in plaintext. Paths are relative to the server root and must include the `/api/` prefix.
+
+### Fallback: Paperclip MCP tools
+
+If `paperclip-api.sh` fails (non-zero exit, script not found, or empty output), fall back to the MCP server. MCP tool paths are relative to the `/api` base URL and must **not** include the `/api/` prefix.
 
 ## Extracting the identifier
 
 Issue URLs follow the pattern `http://host/{project}/issues/{IDENTIFIER}`.
-Extract the last path segment (e.g. `LINAA-33`). The MCP tools accept identifiers
+Extract the last path segment (e.g. `LINAA-33`). Both methods accept identifiers
 directly — no UUID needed for lookup.
 
 ## Diagnostic sequence
@@ -24,14 +42,17 @@ Run these steps for every issue URL supplied. Use concurrent tool calls where th
 
 ### 1. Fetch the issue
 
-Use the `paperclipGetIssue` MCP tool:
+**Primary:**
+```bash
+~/Projects/paperclip/local/bin/paperclip-api.sh GET /api/issues/{IDENTIFIER}
+```
+
+**Fallback:**
 ```json
 {
   "ServerName": "paperclip-local",
   "ToolName": "paperclipGetIssue",
-  "Arguments": {
-    "issueId": "{IDENTIFIER}"
-  }
+  "Arguments": { "issueId": "{IDENTIFIER}" }
 }
 ```
 
@@ -43,15 +64,17 @@ Record:
 
 ### 2. Fetch all runs
 
-Since there is no dedicated MCP tool for listing runs, use the `paperclipApiRequest` MCP tool:
+**Primary:**
+```bash
+~/Projects/paperclip/local/bin/paperclip-api.sh GET /api/issues/{IDENTIFIER}/runs
+```
+
+**Fallback** (no dedicated MCP tool — use `paperclipApiRequest`):
 ```json
 {
   "ServerName": "paperclip-local",
   "ToolName": "paperclipApiRequest",
-  "Arguments": {
-    "method": "GET",
-    "path": "/api/issues/{IDENTIFIER}/runs"
-  }
+  "Arguments": { "method": "GET", "path": "/issues/{IDENTIFIER}/runs" }
 }
 ```
 
@@ -59,15 +82,17 @@ Lists every heartbeat run ever associated with this issue. For each run note `id
 
 ### 3. Fetch the transcript for each run
 
-Use the `paperclipApiRequest` MCP tool to get the run log:
+**Primary:**
+```bash
+~/Projects/paperclip/local/bin/paperclip-api.sh GET /api/heartbeat-runs/{runId}/log
+```
+
+**Fallback:**
 ```json
 {
   "ServerName": "paperclip-local",
   "ToolName": "paperclipApiRequest",
-  "Arguments": {
-    "method": "GET",
-    "path": "/api/heartbeat-runs/{runId}/log"
-  }
+  "Arguments": { "method": "GET", "path": "/heartbeat-runs/{runId}/log" }
 }
 ```
 
@@ -84,14 +109,17 @@ Returns newline-delimited JSON. Each line is a transcript entry — parse and di
 
 ### 4. Fetch comments
 
-Use the `paperclipListComments` MCP tool:
+**Primary:**
+```bash
+~/Projects/paperclip/local/bin/paperclip-api.sh GET /api/issues/{IDENTIFIER}/comments
+```
+
+**Fallback:**
 ```json
 {
   "ServerName": "paperclip-local",
   "ToolName": "paperclipListComments",
-  "Arguments": {
-    "issueId": "{IDENTIFIER}"
-  }
+  "Arguments": { "issueId": "{IDENTIFIER}" }
 }
 ```
 
