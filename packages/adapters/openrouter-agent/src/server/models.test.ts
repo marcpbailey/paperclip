@@ -129,7 +129,7 @@ describe("listModels", () => {
       makeModel({ id: "b/with-tools", name: "With Tools", supported_parameters: ["tools"] }),
     ]);
     const result = await listModels();
-    expect(result.map((m) => m.id)).toEqual(["b/with-tools"]);
+    expect(result.map((m) => m.id)).toEqual([...STATIC_MODEL_IDS, "b/with-tools"]);
   });
 
   it("excludes expired models", async () => {
@@ -140,7 +140,7 @@ describe("listModels", () => {
       makeModel({ id: "b/active", name: "Active", expiration_date: future }),
     ]);
     const result = await listModels();
-    expect(result.map((m) => m.id)).toEqual(["b/active"]);
+    expect(result.map((m) => m.id)).toEqual([...STATIC_MODEL_IDS, "b/active"]);
   });
 
   it("includes non-expired models with tools", async () => {
@@ -149,7 +149,7 @@ describe("listModels", () => {
       makeModel({ id: "a/model", name: "A Model", expiration_date: future }),
     ]);
     const result = await listModels();
-    expect(result.map((m) => m.id)).toEqual(["a/model"]);
+    expect(result.map((m) => m.id)).toEqual([...STATIC_MODEL_IDS, "a/model"]);
   });
 
   // ── fallback ───────────────────────────────────────────────────────────────
