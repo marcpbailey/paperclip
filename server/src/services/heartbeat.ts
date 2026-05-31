@@ -8533,6 +8533,48 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
           });
           await releaseRuntimeServicesForRun(run.id).catch(() => undefined);
           activeRunExecutions.delete(run.id);
+          // becameInactive: if the run's issue is now blocked with all blockers
+          // resolved, the issue_blockers_resolved wake may have fired while this
+          // run still held its lease and been lost. Re-fire here so the issue
+          // doesn't sit stuck indefinitely.
+          try {
+            const becameInactiveIssueId = readNonEmptyString(parseObject(run.contextSnapshot).issueId);
+            if (becameInactiveIssueId) {
+              const becameInactiveIssue = await db
+                .select({
+                  id: issues.id,
+                  status: issues.status,
+                  assigneeAgentId: issues.assigneeAgentId,
+                })
+                .from(issues)
+                .where(and(eq(issues.id, becameInactiveIssueId), eq(issues.companyId, run.companyId)))
+                .then((rows) => rows[0] ?? null);
+              if (becameInactiveIssue?.status === "blocked" && becameInactiveIssue.assigneeAgentId) {
+                const readiness = await issuesSvc.getDependencyReadiness(becameInactiveIssueId);
+                if (readiness.unresolvedBlockerCount === 0) {
+                  await enqueueWakeup(becameInactiveIssue.assigneeAgentId, {
+                    source: "automation",
+                    triggerDetail: "system",
+                    reason: "issue_blockers_resolved",
+                    payload: {
+                      issueId: becameInactiveIssue.id,
+                      blockerIssueIds: readiness.blockerIssueIds,
+                      deferredFor: "became_inactive",
+                    },
+                    contextSnapshot: {
+                      issueId: becameInactiveIssue.id,
+                      taskId: becameInactiveIssue.id,
+                      wakeReason: "issue_blockers_resolved",
+                      source: "run.became_inactive",
+                      blockerIssueIds: readiness.blockerIssueIds,
+                    },
+                  });
+                }
+              }
+            }
+          } catch (err) {
+            logger.warn({ err, runId: run.id }, "becameInactive wake check failed");
+          }
           await startNextQueuedRunForAgent(run.agentId);
         }
   }
