@@ -4,7 +4,7 @@ ADAPTER_DEPLOY := $(HOME)/Projects/linkcast/crew/paperclip/companies/linkcast/ad
 PROJECT       := paperclip-linkcast
 COMPOSE_FILES := -f docker/docker-compose.yml -f local/compose/paperclip-boot-linkcast.yaml
 
-.PHONY: all build-adapter sync-adapter build-container deploy-adapter deploy-container restart test fulltest help
+.PHONY: all build-adapter sync-adapter build-container deploy-adapter deploy-container restart update test fulltest help
 
 test: ## Run the fast unit/integration test suite
 	pnpm vitest run packages/adapters/openrouter-agent packages/adapters/openrouter-external --passWithNoTests
@@ -37,6 +37,27 @@ sync-adapter: ## Sync compiled adapter to the linkcast crew overlay
 deploy-adapter: build-adapter sync-adapter restart ## Compile adapter, sync to overlay, and restart
 
 deploy-container: build-container restart ## Rebuild server image and restart
+
+update: ## Sync local main with an upstream release (VERSION=vX.Y.Z to skip prompt)
+	git fetch origin
+	@if [ -n "$(VERSION)" ]; then \
+	    target="origin/release/$(VERSION)"; \
+	else \
+	    echo "Recent releases:"; \
+	    branches=$$(git branch -r | grep 'origin/release/v' | sort -V | tail -10 | tac | sed 's|.*origin/release/||'); \
+	    echo "  0) Abort (default)"; \
+	    echo "$$branches" | awk '{print "  "NR") "$$0}'; \
+	    printf "Select number [0]: "; \
+	    read choice; \
+	    choice=$${choice:-0}; \
+	    if [ "$$choice" = "0" ]; then echo "Aborted."; exit 0; fi; \
+	    ver=$$(echo "$$branches" | sed -n "$${choice}p"); \
+	    target="origin/release/$$ver"; \
+	fi; \
+	echo "Merging $$target" && \
+	git merge "$$target" && \
+	git push fork main && \
+	git push paperclip main
 
 restart: ## Restart the Paperclip stack (via paperclip-control.sh)
 	./local/bin/paperclip-control.sh restart

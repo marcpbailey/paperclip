@@ -259,7 +259,10 @@ usage: $(basename "$0") [-v|--verbose] {start|stop|restart|teardown|status|logs 
             date for both source and deployed. Shows sync status.
   make      Pass-through to make after establishing the 1Password security
             environment. Use for make targets that invoke pcc restart.
-            Example: pcc make deploy-adapter
+            Examples:
+              pcc make update              # merge latest upstream release (interactive)
+              pcc make update VERSION=vX.Y.Z  # merge a specific release
+              pcc make deploy-adapter      # rebuild and deploy the adapter
             Run \`make help\` for available targets.
 EOF
   exit 1
