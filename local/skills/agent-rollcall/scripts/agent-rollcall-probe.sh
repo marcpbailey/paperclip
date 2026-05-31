@@ -24,8 +24,6 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Resolve agent-delegate scripts relative to this skill's location
-DELEGATE_DIR="$(cd "$SCRIPT_DIR/../../agent-delegate/scripts" && pwd)"
 
 API_URL="${PAPERCLIP_API_URL:?PAPERCLIP_API_URL is not set}"
 API_KEY="${PAPERCLIP_API_KEY:?PAPERCLIP_API_KEY is not set}"
@@ -34,12 +32,14 @@ COMPANY_ID="${PAPERCLIP_COMPANY_ID:?PAPERCLIP_COMPANY_ID is not set}"
 AGENT_ID=""
 AGENT_NAME=""
 PARENT=""
+MODEL_PROFILE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --agent-id)   AGENT_ID="$2";   shift 2 ;;
-    --agent-name) AGENT_NAME="$2"; shift 2 ;;
-    --parent)     PARENT="$2";     shift 2 ;;
+    --agent-id)     AGENT_ID="$2";     shift 2 ;;
+    --agent-name)   AGENT_NAME="$2";   shift 2 ;;
+    --parent)       PARENT="$2";       shift 2 ;;
+    --model-profile) MODEL_PROFILE="$2"; shift 2 ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -86,10 +86,16 @@ DESCRIPTION="Perform a recursive rollcall of your **direct reports** using the *
 
 This is a fresh-start diagnostic: **disregard all previous rollcall history, past comments, and old probe results.** Follow the protocol in your skill's \`SKILL.md\` strictly. If you have no direct reports, set this issue to \`done\` immediately to confirm you are operational."
 
-exec "$DELEGATE_DIR/agent-create-issue.sh" \
+extra_args=()
+if [[ -n "$MODEL_PROFILE" ]]; then
+  extra_args+=(--adapter-overrides "{\"modelProfile\":\"$MODEL_PROFILE\"}")
+fi
+
+exec "$SCRIPT_DIR/agent-create-issue.sh" \
   --title "$TITLE" \
   --assignee "$AGENT_ID" \
   --parent "$PARENT" \
   --status "todo" \
   --origin-kind "rollcall_probe" \
-  --description "$DESCRIPTION"
+  --description "$DESCRIPTION" \
+  "${extra_args[@]}"
