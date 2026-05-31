@@ -1,4 +1,4 @@
-# PLAN PR_5074
+# SPEC PR_5074 custom adapter labels
 
 **Status as of 2026-05-04:** open, awaiting review at https://github.com/paperclipai/paperclip/pull/5074
 

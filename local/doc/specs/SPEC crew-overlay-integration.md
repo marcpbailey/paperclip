@@ -1,4 +1,4 @@
-# Crew Repo Integration: Single Bind Mount with Slug Aliasing
+# SPEC crew-overlay-integration
 
 Implement a single Docker bind mount and server-side slug aliasing so that
 company skills in the crew repo are auto-discovered without a manual import step.

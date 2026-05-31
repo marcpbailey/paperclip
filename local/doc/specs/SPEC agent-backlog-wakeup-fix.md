@@ -1,4 +1,4 @@
-# PLAN agent-backlog-wakeup-fix
+# SPEC agent-backlog-wakeup-fix
 
 **Date:** 2026-05-05  
 **Branch:** linkcast/main  
