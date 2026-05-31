@@ -8,8 +8,8 @@ services:
       OPENROUTER_LIGHT_MODEL: "${OPENROUTER_LIGHT_MODEL:-}"
       GH_TOKEN: "${GH_TOKEN}"
     volumes:
+      - ../local/COMMON_AGENTS.md:/paperclip/AGENTS.md:ro
       - ../local/skills/agent-rollcall:/app/skills/agent-rollcall:ro
-      - ../local/skills/agent-delegate:/app/skills/agent-delegate:ro
       - ../local/skills/trace-issue-run:/app/skills/trace-issue-run:ro
 
 volumes:
