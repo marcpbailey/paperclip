@@ -48,7 +48,10 @@ will skip it cleanly.
 ### Workflow for upstream-owned files (Integration Manager path)
 
 1. Sync fork: `git fetch origin && git push fork main`
-2. Branch: `git checkout -b feat/<slug> && git push fork feat/<slug>`
+2. Branch from upstream — **not from `main`**: `git checkout -b feat/<slug> origin/master && git push fork feat/<slug>`
+   Branching from `main` instead of `origin/master` contaminates the branch history with
+   local-only commits (e.g. skills-catalog, downstream patches) that have no business in
+   an upstream PR.
 3. Commit changes on the branch, push to `fork`.
 4. Open PR: `marcpbailey/paperclip:feat/<slug>` → `paperclipai/paperclip:master`
    _(Marc runs this manually — `gh` is 1Password-shimmed, agents cannot call it)_
