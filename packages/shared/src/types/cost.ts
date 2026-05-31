@@ -41,6 +41,8 @@ export interface IssueCostSummary {
   /** sum of wall-clock duration of each run in the tree (ms);
    * still-running runs contribute (now - startedAt) so this ticks up live */
   runtimeMs: number;
+  /** sum of estimated/notional USD cost of each run in the tree */
+  notionalCostUsd?: number;
 }
 
 export interface CostByAgent {

@@ -205,7 +205,13 @@ export function costService(db: Db, budgetHooks: BudgetServiceHooks = {}) {
         )
         SELECT
           count(distinct ${heartbeatRuns.id})::int AS "runCount",
-          coalesce(sum(extract(epoch from (coalesce(${heartbeatRuns.finishedAt}, now()) - ${heartbeatRuns.startedAt})) * 1000), 0)::double precision AS "runtimeMs"
+          coalesce(sum(extract(epoch from (coalesce(${heartbeatRuns.finishedAt}, now()) - ${heartbeatRuns.startedAt})) * 1000), 0)::double precision AS "runtimeMs",
+          coalesce(sum(coalesce(
+            (${heartbeatRuns.usageJson} ->> 'costUsd')::double precision,
+            (${heartbeatRuns.usageJson} ->> 'cost_usd')::double precision,
+            (${heartbeatRuns.usageJson} ->> 'total_cost_usd')::double precision,
+            0
+          )), 0)::double precision AS "notionalCostUsd"
         FROM ${heartbeatRuns}
         WHERE ${heartbeatRuns.companyId} = ${companyId}
           AND ${heartbeatRuns.startedAt} IS NOT NULL
@@ -254,7 +260,7 @@ export function costService(db: Db, budgetHooks: BudgetServiceHooks = {}) {
 
       const costRow = costRowResult[0];
       const runRow = Array.isArray(runRowResult)
-        ? (runRowResult[0] as { runCount?: number | string | null; runtimeMs?: number | string | null } | undefined)
+        ? (runRowResult[0] as { runCount?: number | string | null; runtimeMs?: number | string | null; notionalCostUsd?: number | string | null } | undefined)
         : undefined;
 
       return {
@@ -267,6 +273,7 @@ export function costService(db: Db, budgetHooks: BudgetServiceHooks = {}) {
         outputTokens: Number(costRow?.outputTokens ?? 0),
         runCount: Number(runRow?.runCount ?? 0),
         runtimeMs: Number(runRow?.runtimeMs ?? 0),
+        notionalCostUsd: Number(runRow?.notionalCostUsd ?? 0),
       };
     },
 

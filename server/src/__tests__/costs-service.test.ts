@@ -81,6 +81,7 @@ const mockCostService = vi.hoisted(() => ({
     outputTokens: 0,
     runCount: 0,
     runtimeMs: 0,
+    notionalCostUsd: 0,
   }),
   windowSpend: vi.fn().mockResolvedValue([]),
   byProject: vi.fn().mockResolvedValue([]),
@@ -256,6 +257,7 @@ describe("cost routes", () => {
       outputTokens: 0,
       runCount: 0,
       runtimeMs: 0,
+      notionalCostUsd: 0,
     });
   });
 
@@ -632,6 +634,7 @@ describeEmbeddedPostgres("cost and finance aggregate overflow handling", () => {
       outputTokens: 12,
       runCount: 0,
       runtimeMs: 0,
+      notionalCostUsd: 0,
     });
   });
 
