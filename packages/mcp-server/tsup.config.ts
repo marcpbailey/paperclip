@@ -1,5 +1,7 @@
 import { defineConfig } from "tsup";
 
+// Two entries run in parallel by tsup; clean is handled by the build script
+// (rm -rf dist) rather than per-entry to avoid a race between the parallel builds.
 export default defineConfig([
   {
     // Library entry for npm publish
@@ -8,7 +10,7 @@ export default defineConfig([
     outDir: "dist",
     dts: true,
     sourcemap: true,
-    clean: true,
+    clean: false,
     splitting: false,
   },
   {
