@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -6,6 +7,8 @@ import { describe, expect, it } from "vitest";
 import {
   applyPaperclipWorkspaceEnv,
   appendWithByteCap,
+  buildPaperclipEnv,
+  deriveAgentEmail,
   buildPersistentSkillSnapshot,
   buildRuntimeMountedSkillSnapshot,
   buildInvocationEnvForLogs,
@@ -1149,6 +1152,106 @@ describe("refreshPaperclipWorkspaceEnvForExecution", () => {
         workspaceId: "workspace-2",
       },
     ]);
+  });
+});
+
+describe("buildPaperclipEnv per-agent git identity", () => {
+  const agent = (over: Partial<{ id: string; companyId: string; name: string }> = {}) => ({
+    id: "11111111-2222-3333-4444-555555555555",
+    companyId: "company-1",
+    name: "Nebula",
+    ...over,
+  });
+
+  it("emits PAPERCLIP_AGENT_NAME and all four GIT_* vars derived from agent.name", () => {
+    const env = buildPaperclipEnv(agent());
+    const expectedEmail = deriveAgentEmail(agent());
+
+    expect(env.PAPERCLIP_AGENT_NAME).toBe("Nebula");
+    expect(env.GIT_AUTHOR_NAME).toBe("Nebula");
+    expect(env.GIT_COMMITTER_NAME).toBe("Nebula");
+    expect(env.GIT_AUTHOR_EMAIL).toBe(expectedEmail);
+    expect(env.GIT_COMMITTER_EMAIL).toBe(expectedEmail);
+    expect(env.PAPERCLIP_AGENT_ID).toBe(agent().id);
+    expect(env.PAPERCLIP_COMPANY_ID).toBe("company-1");
+  });
+
+  it("is stable across calls for the same agent", () => {
+    expect(buildPaperclipEnv(agent()).GIT_AUTHOR_EMAIL).toBe(
+      buildPaperclipEnv(agent()).GIT_AUTHOR_EMAIL,
+    );
+  });
+
+  it("slugifies the email local-part: lowercase, non-alnum runs -> single dash", () => {
+    const env = buildPaperclipEnv(agent({ name: "Star-Lord (UI) Operator!" }));
+    expect(env.GIT_AUTHOR_EMAIL).toBe(
+      `star-lord-ui-operator-${agent().id.slice(0, 8)}@agents.paperclip.local`,
+    );
+  });
+
+  it("falls back to 'agent' when the name has no usable characters", () => {
+    const env = buildPaperclipEnv(agent({ name: "!!!" }));
+    expect(env.GIT_AUTHOR_EMAIL).toBe(`agent-${agent().id.slice(0, 8)}@agents.paperclip.local`);
+  });
+
+  it("gives two agents with different names a different name AND email", () => {
+    const a = buildPaperclipEnv(agent({ id: "aaaaaaaa-0000-0000-0000-000000000000", name: "Gamora" }));
+    const b = buildPaperclipEnv(agent({ id: "bbbbbbbb-0000-0000-0000-000000000000", name: "Drax" }));
+
+    expect(a.GIT_AUTHOR_NAME).not.toBe(b.GIT_AUTHOR_NAME);
+    expect(a.GIT_AUTHOR_EMAIL).not.toBe(b.GIT_AUTHOR_EMAIL);
+  });
+
+  it("gives two agents that share a display name distinct emails (id suffix)", () => {
+    const a = buildPaperclipEnv(agent({ id: "aaaaaaaa-0000-0000-0000-000000000000", name: "Operator" }));
+    const b = buildPaperclipEnv(agent({ id: "bbbbbbbb-0000-0000-0000-000000000000", name: "Operator" }));
+
+    expect(a.GIT_AUTHOR_NAME).toBe(b.GIT_AUTHOR_NAME);
+    expect(a.GIT_AUTHOR_EMAIL).not.toBe(b.GIT_AUTHOR_EMAIL);
+  });
+
+  it("env-var identity overrides a conflicting `git config --local user.*` on a shared repo", async () => {
+    const repo = await fs.mkdtemp(path.join(os.tmpdir(), "lc1024-gitid-"));
+    try {
+      const git = (gitArgs: string[], extraEnv: Record<string, string> = {}) =>
+        execFileSync("git", gitArgs, {
+          cwd: repo,
+          env: {
+            ...process.env,
+            GIT_CONFIG_NOSYSTEM: "1",
+            HOME: repo,
+            ...extraEnv,
+          },
+          encoding: "utf8",
+        });
+
+      git(["init", "-q"]);
+      git(["config", "commit.gpgsign", "false"]);
+      // Seed a conflicting LOCAL identity for agent X (the failure mode LC-1024 fixes).
+      git(["config", "--local", "user.name", "Fury (Paperclip Agent)"]);
+      git(["config", "--local", "user.email", "fury@linkcast.ai"]);
+
+      // Commit as agent Y purely via the GIT_* env buildPaperclipEnv produces.
+      const agentY = agent({ id: "ffffffff-1111-2222-3333-444444444444", name: "Gamora" });
+      const yEnv = buildPaperclipEnv(agentY);
+      await fs.writeFile(path.join(repo, "file.txt"), "hello\n");
+      git(["add", "file.txt"]);
+      git(["commit", "-q", "-m", "commit as agent Y"], {
+        GIT_AUTHOR_NAME: yEnv.GIT_AUTHOR_NAME,
+        GIT_AUTHOR_EMAIL: yEnv.GIT_AUTHOR_EMAIL,
+        GIT_COMMITTER_NAME: yEnv.GIT_COMMITTER_NAME,
+        GIT_COMMITTER_EMAIL: yEnv.GIT_COMMITTER_EMAIL,
+      });
+
+      const authorLine = git(["log", "-1", "--pretty=%an <%ae>"]).trim();
+      const committerLine = git(["log", "-1", "--pretty=%cn <%ce>"]).trim();
+
+      expect(authorLine).toBe(`Gamora <${deriveAgentEmail(agentY)}>`);
+      expect(committerLine).toBe(`Gamora <${deriveAgentEmail(agentY)}>`);
+      expect(authorLine).not.toContain("Fury");
+    } finally {
+      await fs.rm(repo, { recursive: true, force: true });
+    }
   });
 });
 

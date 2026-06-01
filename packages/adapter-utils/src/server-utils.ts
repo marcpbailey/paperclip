@@ -928,16 +928,59 @@ export function buildInvocationEnvForLogs(
   return redactEnvForLogs(merged);
 }
 
-export function buildPaperclipEnv(agent: { id: string; companyId: string }): Record<string, string> {
+/**
+ * Slugify an agent display name for use in an email local-part: lowercase and
+ * collapse every run of non-`[a-z0-9]` characters to a single `-`, then trim
+ * leading/trailing `-`. Falls back to `"agent"` when nothing usable remains so
+ * we never emit an address with an empty or `-`-leading local-part.
+ */
+function slugifyAgentName(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug.length > 0 ? slug : "agent";
+}
+
+/**
+ * Derive a stable, per-agent git identity email. Stable across runs (depends
+ * only on the agent's name + id, both immutable for a given agent) and unique
+ * per agent: the `agent.id` suffix guarantees distinct addresses even when two
+ * agents share a display name.
+ *
+ * OVERRIDE SEAM: a future change may let an agent/company supply an explicit
+ * commit email (per-agent override or a company email domain). When that lands,
+ * short-circuit here (e.g. `if (agent.email) return agent.email;`) BEFORE the
+ * derived default below. Intentionally not built now — see LC-1024.
+ */
+export function deriveAgentEmail(agent: { id: string; name: string }): string {
+  return `${slugifyAgentName(agent.name)}-${agent.id.slice(0, 8)}@agents.paperclip.local`;
+}
+
+export function buildPaperclipEnv(agent: {
+  id: string;
+  companyId: string;
+  name: string;
+}): Record<string, string> {
   const resolveHostForUrl = (rawHost: string): string => {
     const host = rawHost.trim();
     if (!host || host === "0.0.0.0" || host === "::") return "localhost";
     if (host.includes(":") && !host.startsWith("[") && !host.endsWith("]")) return `[${host}]`;
     return host;
   };
+  const agentEmail = deriveAgentEmail(agent);
   const vars: Record<string, string> = {
     PAPERCLIP_AGENT_ID: agent.id,
     PAPERCLIP_COMPANY_ID: agent.companyId,
+    PAPERCLIP_AGENT_NAME: agent.name,
+    // Per-agent git identity via per-process env (NOT `git config --local`):
+    // the project_primary checkout is shared across agents, so local config
+    // races; GIT_* env vars are per-process and race-safe, and override any
+    // conflicting committed/local `user.*` config. See LC-1024 / LINAA-1022.
+    GIT_AUTHOR_NAME: agent.name,
+    GIT_COMMITTER_NAME: agent.name,
+    GIT_AUTHOR_EMAIL: agentEmail,
+    GIT_COMMITTER_EMAIL: agentEmail,
   };
   const runtimeHost = resolveHostForUrl(
     process.env.PAPERCLIP_LISTEN_HOST ?? process.env.HOST ?? "localhost",
