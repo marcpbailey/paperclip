@@ -140,7 +140,7 @@ vi.mock("@/lib/router", () => ({
 
 // jsdom doesn't implement scrollIntoView; the inbox calls it from a passive effect.
 if (typeof Element !== "undefined" && !Element.prototype.scrollIntoView) {
-  Element.prototype.scrollIntoView = () => {};
+  Element.prototype.scrollIntoView = () => { };
 }
 
 function createIssue(overrides: Partial<Issue> = {}): Issue {
@@ -419,8 +419,8 @@ describe("FailedRunInboxRow", () => {
           issueById={new Map()}
           agentName="Agent"
           issueLinkState={null}
-          onDismiss={() => {}}
-          onRetry={() => {}}
+          onDismiss={() => { }}
+          onRetry={() => { }}
           isRetrying={false}
           selected
         />,

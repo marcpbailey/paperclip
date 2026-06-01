@@ -581,7 +581,7 @@ export function buildHostServices(
    * required for company-scoped data access, but there is no per-company
    * availability gate to enforce here.
    */
-  const ensurePluginAvailableForCompany = async (_companyId: string) => {};
+  const ensurePluginAvailableForCompany = async (_companyId: string) => { };
 
   const getLocalFolderDeclaration = (folderKey: string) =>
     requireLocalFolderDeclaration(options.manifest?.localFolders, folderKey);
@@ -1135,7 +1135,7 @@ export function buildHostServices(
         return inspectStoredLocalFolder(companyId, params.folderKey);
       },
 
-      async deleteFile(params: any) {
+      async deleteFile(params) {
         const companyId = ensureCompanyId(params.companyId);
         const status = await inspectStoredLocalFolder(companyId, params.folderKey);
         assertWritableConfiguredLocalFolder(status);
@@ -1500,17 +1500,17 @@ export function buildHostServices(
     },
 
     skills: {
-      async managedGet(params: any) {
+      async managedGet(params) {
         const companyId = ensureCompanyId(params.companyId);
         await ensurePluginAvailableForCompany(companyId);
         return managedSkills.get(params.skillKey, companyId);
       },
-      async managedReconcile(params: any) {
+      async managedReconcile(params) {
         const companyId = ensureCompanyId(params.companyId);
         await ensurePluginAvailableForCompany(companyId);
         return managedSkills.reconcile(params.skillKey, companyId);
       },
-      async managedReset(params: any) {
+      async managedReset(params) {
         const companyId = ensureCompanyId(params.companyId);
         await ensurePluginAvailableForCompany(companyId);
         return managedSkills.reset(params.skillKey, companyId);
@@ -1769,11 +1769,11 @@ export function buildHostServices(
           ...(activeRuns ? { activeRuns } : {}),
           ...(assigneeRows
             ? {
-                assignees: Object.fromEntries(assigneeRows.map((agent) => [
-                  agent.id,
-                  { ...agent, status: agent.status as Agent["status"] } as PluginIssueAssigneeSummary,
-                ])),
-              }
+              assignees: Object.fromEntries(assigneeRows.map((agent) => [
+                agent.id,
+                { ...agent, status: agent.status as Agent["status"] } as PluginIssueAssigneeSummary,
+              ])),
+            }
             : {}),
         };
       },

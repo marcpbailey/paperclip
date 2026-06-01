@@ -217,13 +217,7 @@ export type BuiltInIssueOriginKind = (typeof ISSUE_ORIGIN_KINDS)[number];
 export type PluginIssueOriginKind = `plugin:${string}`;
 export type SkillIssueOriginKind = `skill:${string}`;
 export type IntentIssueOriginKind = `intent:${string}`;
-
-export type IssueOriginKind =
-  | BuiltInIssueOriginKind
-  | PluginIssueOriginKind
-  | SkillIssueOriginKind
-  | IntentIssueOriginKind;
-
+export type IssueOriginKind = BuiltInIssueOriginKind | PluginIssueOriginKind | SkillIssueOriginKind | IntentIssueOriginKind;
 export const ISSUE_SURFACE_VISIBILITIES = ["default", "plugin_operation"] as const;
 export type IssueSurfaceVisibility = (typeof ISSUE_SURFACE_VISIBILITIES)[number];
 
@@ -411,7 +405,7 @@ export const ROUTINE_RUN_STATUSES = [
   "issue_created",
   "completed",
   "failed",
- ] as const;
+] as const;
 export type RoutineRunStatus = (typeof ROUTINE_RUN_STATUSES)[number];
 
 export const ROUTINE_RUN_SOURCES = ["schedule", "manual", "api", "webhook"] as const;

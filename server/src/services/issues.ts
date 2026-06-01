@@ -922,9 +922,9 @@ function issueLatestLogAtExpr(companyId: string) {
         AND ${activityLog.entityType} = 'issue'
         AND ${activityLog.entityId} = ${issues.id}::text
         AND ${activityLog.action} NOT IN (${sql.join(
-          ISSUE_LOCAL_INBOX_ACTIVITY_ACTIONS.map((action) => sql`${action}`),
-          sql`, `,
-        )})
+    ISSUE_LOCAL_INBOX_ACTIVITY_ACTIONS.map((action) => sql`${action}`),
+    sql`, `,
+  )})
     )
   `;
 }
@@ -1726,13 +1726,13 @@ async function listIssueBlockerAttentionMap(
 
   const agentRows: IssueBlockerAttentionAgentRow[] = agentIds.size > 0
     ? await dbOrTx
-        .select({
-          id: agents.id,
-          companyId: agents.companyId,
-          status: agents.status,
-        })
-        .from(agents)
-        .where(and(eq(agents.companyId, companyId), inArray(agents.id, [...agentIds])))
+      .select({
+        id: agents.id,
+        companyId: agents.companyId,
+        status: agents.status,
+      })
+      .from(agents)
+      .where(and(eq(agents.companyId, companyId), inArray(agents.id, [...agentIds])))
     : [];
   const agentsById = new Map(agentRows.map((agent) => [agent.id, agent]));
 
@@ -2479,80 +2479,80 @@ async function listIssueBlockedInboxAttentionMap(
     graphIssueIds.length === 0
       ? Promise.resolve([])
       : dbOrTx
-          .select({
-            companyId: heartbeatRuns.companyId,
-            issueId: sql<string | null>`${heartbeatRuns.contextSnapshot} ->> 'issueId'`,
-            agentId: heartbeatRuns.agentId,
-            status: heartbeatRuns.status,
-          })
-          .from(heartbeatRuns)
-          .where(and(
-            eq(heartbeatRuns.companyId, companyId),
-            inArray(heartbeatRuns.status, [...BLOCKED_INBOX_ACTIVE_RUN_STATUSES]),
-            inArray(sql<string>`${heartbeatRuns.contextSnapshot} ->> 'issueId'`, graphIssueIds),
-          )),
+        .select({
+          companyId: heartbeatRuns.companyId,
+          issueId: sql<string | null>`${heartbeatRuns.contextSnapshot} ->> 'issueId'`,
+          agentId: heartbeatRuns.agentId,
+          status: heartbeatRuns.status,
+        })
+        .from(heartbeatRuns)
+        .where(and(
+          eq(heartbeatRuns.companyId, companyId),
+          inArray(heartbeatRuns.status, [...BLOCKED_INBOX_ACTIVE_RUN_STATUSES]),
+          inArray(sql<string>`${heartbeatRuns.contextSnapshot} ->> 'issueId'`, graphIssueIds),
+        )),
     graphIssueIds.length === 0
       ? Promise.resolve([])
       : dbOrTx
-          .select({
-            companyId: agentWakeupRequests.companyId,
-            issueId: sql<string | null>`${agentWakeupRequests.payload} ->> 'issueId'`,
-            agentId: agentWakeupRequests.agentId,
-            status: agentWakeupRequests.status,
-          })
-          .from(agentWakeupRequests)
-          .where(and(
-            eq(agentWakeupRequests.companyId, companyId),
-            inArray(agentWakeupRequests.status, [...BLOCKED_INBOX_ACTIVE_WAKE_STATUSES]),
-            sql`${agentWakeupRequests.runId} is null`,
-            inArray(sql<string>`${agentWakeupRequests.payload} ->> 'issueId'`, graphIssueIds),
-          )),
+        .select({
+          companyId: agentWakeupRequests.companyId,
+          issueId: sql<string | null>`${agentWakeupRequests.payload} ->> 'issueId'`,
+          agentId: agentWakeupRequests.agentId,
+          status: agentWakeupRequests.status,
+        })
+        .from(agentWakeupRequests)
+        .where(and(
+          eq(agentWakeupRequests.companyId, companyId),
+          inArray(agentWakeupRequests.status, [...BLOCKED_INBOX_ACTIVE_WAKE_STATUSES]),
+          sql`${agentWakeupRequests.runId} is null`,
+          inArray(sql<string>`${agentWakeupRequests.payload} ->> 'issueId'`, graphIssueIds),
+        )),
     graphIssueIds.length === 0
       ? Promise.resolve([])
       : dbOrTx
-          .select({
-            companyId: heartbeatRuns.companyId,
-            issueId: sql<string | null>`${heartbeatRuns.contextSnapshot} ->> 'issueId'`,
-            agentId: heartbeatRuns.agentId,
-            status: heartbeatRuns.status,
-          })
-          .from(heartbeatRuns)
-          .where(and(
-            eq(heartbeatRuns.companyId, companyId),
-            eq(heartbeatRuns.status, "scheduled_retry"),
-            inArray(sql<string>`${heartbeatRuns.contextSnapshot} ->> 'issueId'`, graphIssueIds),
-          )),
+        .select({
+          companyId: heartbeatRuns.companyId,
+          issueId: sql<string | null>`${heartbeatRuns.contextSnapshot} ->> 'issueId'`,
+          agentId: heartbeatRuns.agentId,
+          status: heartbeatRuns.status,
+        })
+        .from(heartbeatRuns)
+        .where(and(
+          eq(heartbeatRuns.companyId, companyId),
+          eq(heartbeatRuns.status, "scheduled_retry"),
+          inArray(sql<string>`${heartbeatRuns.contextSnapshot} ->> 'issueId'`, graphIssueIds),
+        )),
     graphIssueIds.length === 0
       ? Promise.resolve([])
       : dbOrTx
-          .select({
-            id: issueThreadInteractions.id,
-            issueId: issueThreadInteractions.issueId,
-            kind: issueThreadInteractions.kind,
-            createdAt: issueThreadInteractions.createdAt,
-          })
-          .from(issueThreadInteractions)
-          .where(and(
-            eq(issueThreadInteractions.companyId, companyId),
-            inArray(issueThreadInteractions.status, [...BLOCKED_INBOX_PENDING_INTERACTION_STATUSES]),
-            inArray(issueThreadInteractions.issueId, graphIssueIds),
-          )),
+        .select({
+          id: issueThreadInteractions.id,
+          issueId: issueThreadInteractions.issueId,
+          kind: issueThreadInteractions.kind,
+          createdAt: issueThreadInteractions.createdAt,
+        })
+        .from(issueThreadInteractions)
+        .where(and(
+          eq(issueThreadInteractions.companyId, companyId),
+          inArray(issueThreadInteractions.status, [...BLOCKED_INBOX_PENDING_INTERACTION_STATUSES]),
+          inArray(issueThreadInteractions.issueId, graphIssueIds),
+        )),
     graphIssueIds.length === 0
       ? Promise.resolve([])
       : dbOrTx
-          .select({
-            approvalId: approvals.id,
-            issueId: issueApprovals.issueId,
-            createdAt: approvals.createdAt,
-          })
-          .from(issueApprovals)
-          .innerJoin(approvals, eq(issueApprovals.approvalId, approvals.id))
-          .where(and(
-            eq(issueApprovals.companyId, companyId),
-            eq(approvals.companyId, companyId),
-            inArray(approvals.status, [...BLOCKED_INBOX_PENDING_APPROVAL_STATUSES]),
-            inArray(issueApprovals.issueId, graphIssueIds),
-          )),
+        .select({
+          approvalId: approvals.id,
+          issueId: issueApprovals.issueId,
+          createdAt: approvals.createdAt,
+        })
+        .from(issueApprovals)
+        .innerJoin(approvals, eq(issueApprovals.approvalId, approvals.id))
+        .where(and(
+          eq(issueApprovals.companyId, companyId),
+          eq(approvals.companyId, companyId),
+          inArray(approvals.status, [...BLOCKED_INBOX_PENDING_APPROVAL_STATUSES]),
+          inArray(issueApprovals.issueId, graphIssueIds),
+        )),
     listSuccessfulRunHandoffMapForIssues(dbOrTx, companyId, rowIssueIds),
   ]);
 
@@ -2734,25 +2734,6 @@ async function listIssueBlockedInboxAttentionMap(
       continue;
     }
 
-    const hasMonitor = Boolean(row.monitorNextCheckAt && row.monitorNextCheckAt.getTime() > Date.now());
-    const external = row.status === "blocked" && !hasMonitor ? externalWaitFromDescription(row.description) : null;
-    if (external) {
-      result.set(row.id, attentionBase({
-        state: "external_wait",
-        reason: "external_owner_action",
-        severity: "medium",
-        stoppedSinceAt: row.updatedAt,
-        owner: { type: "external", agentId: null, userId: null, label: null },
-        action: {
-          label: "External owner action",
-          detail: null,
-        },
-        sourceIssue: source,
-        externalDetailsRedacted: true,
-      }));
-      continue;
-    }
-
     const finding = findingByIssueId.get(row.id);
     if (finding) {
       const leaf = finding.dependencyPath.length > 1
@@ -2791,7 +2772,7 @@ async function listIssueBlockedInboxAttentionMap(
               case "in_review_without_action_path":
                 return "Choose review path";
               default:
-                return "Investigate";
+                return "Needs attention";
             }
           })(),
           detail: finding.recommendedAction,
@@ -2800,6 +2781,25 @@ async function listIssueBlockedInboxAttentionMap(
         leafIssue: issueRef(leaf),
         recoveryIssue: issueRef(issuesById.get(finding.recoveryIssueId)),
         sampleIssueIdentifier: leaf?.identifier ?? finding.identifier,
+      }));
+      continue;
+    }
+
+    const hasMonitor = Boolean(row.monitorNextCheckAt && row.monitorNextCheckAt.getTime() > Date.now());
+    const external = row.status === "blocked" && !hasMonitor ? externalWaitFromDescription(row.description) : null;
+    if (external) {
+      result.set(row.id, attentionBase({
+        state: "external_wait",
+        reason: "external_owner_action",
+        severity: "medium",
+        stoppedSinceAt: row.updatedAt,
+        owner: { type: "external", agentId: null, userId: null, label: null },
+        action: {
+          label: "External owner action",
+          detail: null,
+        },
+        sourceIssue: source,
+        externalDetailsRedacted: true,
       }));
       continue;
     }
@@ -2995,10 +2995,10 @@ async function listBlockedInboxIssues(
         : {}),
       ...(contextUserId
         ? deriveIssueUserContext(row, contextUserId, {
-            myLastCommentAt: statsByIssueId.get(row.id)?.myLastCommentAt ?? null,
-            myLastReadAt: readByIssueId.get(row.id) ?? null,
-            lastExternalCommentAt: statsByIssueId.get(row.id)?.lastExternalCommentAt ?? null,
-          })
+          myLastCommentAt: statsByIssueId.get(row.id)?.myLastCommentAt ?? null,
+          myLastReadAt: readByIssueId.get(row.id) ?? null,
+          lastExternalCommentAt: statsByIssueId.get(row.id)?.lastExternalCommentAt ?? null,
+        })
         : {}),
     }];
   }).sort(compareBlockedInboxRows);
@@ -4253,14 +4253,14 @@ export function issueService(db: Db) {
       const childIdsForSummaries = children.slice(0, MAX_CHILD_COMPLETION_SUMMARIES).map((child) => child.id);
       const commentRows = childIdsForSummaries.length > 0
         ? await db
-            .select({
-              issueId: issueComments.issueId,
-              body: issueComments.body,
-              createdAt: issueComments.createdAt,
-            })
-            .from(issueComments)
-            .where(and(eq(issueComments.companyId, parent.companyId), inArray(issueComments.issueId, childIdsForSummaries)))
-            .orderBy(desc(issueComments.createdAt), desc(issueComments.id))
+          .select({
+            issueId: issueComments.issueId,
+            body: issueComments.body,
+            createdAt: issueComments.createdAt,
+          })
+          .from(issueComments)
+          .where(and(eq(issueComments.companyId, parent.companyId), inArray(issueComments.issueId, childIdsForSummaries)))
+          .orderBy(desc(issueComments.createdAt), desc(issueComments.id))
         : [];
       const latestCommentByIssueId = new Map<string, string>();
       for (const comment of commentRows) {
@@ -4532,9 +4532,9 @@ export function issueService(db: Db) {
       const childIssueIds = normalizeIssuePlanDecompositionChildIds(currentClaim.childIssueIds);
       const childIssueRows = childIssueIds.length > 0
         ? await db
-            .select()
-            .from(issues)
-            .where(and(eq(issues.companyId, sourceIssue.companyId), inArray(issues.id, childIssueIds)))
+          .select()
+          .from(issues)
+          .where(and(eq(issues.companyId, sourceIssue.companyId), inArray(issues.id, childIssueIds)))
         : [];
       const childIssueMap = new Map(childIssueRows.map((row) => [row.id, row]));
       const orderedChildIssues = childIssueIds
@@ -4586,17 +4586,17 @@ export function issueService(db: Db) {
 
       const childIssueRows = allChildIds.size > 0
         ? await db
-            .select({
-              id: issues.id,
-              identifier: issues.identifier,
-              title: issues.title,
-              status: issues.status,
-              priority: issues.priority,
-              assigneeAgentId: issues.assigneeAgentId,
-              assigneeUserId: issues.assigneeUserId,
-            })
-            .from(issues)
-            .where(and(eq(issues.companyId, sourceIssue.companyId), inArray(issues.id, Array.from(allChildIds))))
+          .select({
+            id: issues.id,
+            identifier: issues.identifier,
+            title: issues.title,
+            status: issues.status,
+            priority: issues.priority,
+            assigneeAgentId: issues.assigneeAgentId,
+            assigneeUserId: issues.assigneeUserId,
+          })
+          .from(issues)
+          .where(and(eq(issues.companyId, sourceIssue.companyId), inArray(issues.id, Array.from(allChildIds))))
         : [];
       const childIssueMap = new Map(childIssueRows.map((row) => [row.id, row]));
 
@@ -4904,8 +4904,8 @@ export function issueService(db: Db) {
         const unresolvedBlockerIssueIds = blockedByIssueIds !== undefined
           ? await listUnresolvedBlockerIssueIds(dbOrTx, existing.companyId, blockedByIssueIds)
           : (
-              await listIssueDependencyReadinessMap(dbOrTx, existing.companyId, [id])
-            ).get(id)?.unresolvedBlockerIssueIds ?? [];
+            await listIssueDependencyReadinessMap(dbOrTx, existing.companyId, [id])
+          ).get(id)?.unresolvedBlockerIssueIds ?? [];
         if (unresolvedBlockerIssueIds.length > 0) {
           throw unprocessable("Issue is blocked by unresolved blockers", { unresolvedBlockerIssueIds });
         }
@@ -5594,13 +5594,13 @@ export function issueService(db: Db) {
         conditions.push(
           order === "asc"
             ? or(
-                gt(issueComments.createdAt, anchor.createdAt),
-                and(eq(issueComments.createdAt, anchor.createdAt), gt(issueComments.id, anchor.id)),
-              )!
+              gt(issueComments.createdAt, anchor.createdAt),
+              and(eq(issueComments.createdAt, anchor.createdAt), gt(issueComments.id, anchor.id)),
+            )!
             : or(
-                lt(issueComments.createdAt, anchor.createdAt),
-                and(eq(issueComments.createdAt, anchor.createdAt), lt(issueComments.id, anchor.id)),
-              )!,
+              lt(issueComments.createdAt, anchor.createdAt),
+              and(eq(issueComments.createdAt, anchor.createdAt), lt(issueComments.id, anchor.id)),
+            )!,
         );
       }
 

@@ -181,9 +181,8 @@ function ComboboxField({
                 {opts.map((opt) => (
                   <button
                     key={opt.value}
-                    className={`flex items-center w-full px-2 py-1.5 text-sm rounded hover:bg-accent/50 ${
-                      opt.value === value ? "bg-accent" : ""
-                    }`}
+                    className={`flex items-center w-full px-2 py-1.5 text-sm rounded hover:bg-accent/50 ${opt.value === value ? "bg-accent" : ""
+                      }`}
                     onMouseDown={(e) => {
                       e.preventDefault(); // prevent input blur
                       select(opt.value);

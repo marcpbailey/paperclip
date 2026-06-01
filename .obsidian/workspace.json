@@ -185,6 +185,7 @@
   },
   "active": "680cc91727f83046",
   "lastOpenFiles": [
+    "_tmp_81749_34c87fc0ec288492e9bed4efacdccece",
     "scripts/upstream-sync.sh",
     "wiki/prompts/2026-06-01 rollcall-workspace-model-improvements v1.sonnet-4.6.md",
     "wiki/prompts/2026-06-01 rollcall-model-column-debug v1.sonnet-4.6.md",
@@ -202,7 +203,6 @@
     "packages/adapters/openrouter-external/tsconfig.json",
     "packages/adapters/openrouter-external/src/server/test.ts",
     "packages/adapters/openrouter-external/src/server/index.ts",
-    "packages/adapters/openrouter-external/src/server/execute.ts",
     "packages/adapters/openrouter-external/README.md",
     "packages/adapters/openrouter-agent/TOOL-RESULT-ENCODING.md",
     "packages/adapters/openrouter-agent/README.md",

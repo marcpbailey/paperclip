@@ -289,9 +289,9 @@ function isStrandedIssueRecoveryIssue(issue: Pick<typeof issues.$inferSelect, "o
 function isUnsuccessfulTerminalIssueRun(latestRun: LatestIssueRun) {
   return Boolean(
     latestRun &&
-      UNSUCCESSFUL_HEARTBEAT_RUN_TERMINAL_STATUSES.includes(
-        latestRun.status as (typeof UNSUCCESSFUL_HEARTBEAT_RUN_TERMINAL_STATUSES)[number],
-      ),
+    UNSUCCESSFUL_HEARTBEAT_RUN_TERMINAL_STATUSES.includes(
+      latestRun.status as (typeof UNSUCCESSFUL_HEARTBEAT_RUN_TERMINAL_STATUSES)[number],
+    ),
   );
 }
 
@@ -343,10 +343,10 @@ function isUniqueLivenessRecoveryConflict(error: unknown) {
       maybe.constraint === "issues_active_liveness_recovery_incident_uq" ||
       maybe.constraint === "issues_active_liveness_recovery_leaf_uq" ||
       typeof maybe.message === "string" &&
-        (
-          maybe.message.includes("issues_active_liveness_recovery_incident_uq") ||
-          maybe.message.includes("issues_active_liveness_recovery_leaf_uq")
-        )
+      (
+        maybe.message.includes("issues_active_liveness_recovery_incident_uq") ||
+        maybe.message.includes("issues_active_liveness_recovery_leaf_uq")
+      )
     );
 }
 
@@ -3086,7 +3086,7 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
     const [firstTimestamp, ...remainingTimestamps] = timestamps as Date[];
     return remainingTimestamps.reduce((latest, updatedAt) =>
       updatedAt > latest ? updatedAt : latest,
-    firstTimestamp!);
+      firstTimestamp!);
   }
 
   function isLivenessFindingInsideAutoRecoveryLookback(

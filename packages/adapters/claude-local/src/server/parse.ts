@@ -14,6 +14,7 @@ const CLAUDE_TRANSIENT_UPSTREAM_RE =
 const CLAUDE_EXTRA_USAGE_RESET_RE =
   /(?:out\s+of\s+extra\s+usage|extra\s+usage|usage\s+limit\s+reached|usage\s+cap\s+reached|5[-\s]?hour\s+limit\s+reached|weekly\s+limit\s+reached|claude\s+usage\s+limit\s+reached)[\s\S]{0,80}?\bresets?\s+(?:at\s+)?([^\n()]+?)(?:\s*\(([^)]+)\))?(?:[.!]|\n|$)/i;
 
+
 export function parseClaudeStreamJson(stdout: string) {
   let sessionId: string | null = null;
   let model = "";
@@ -183,6 +184,7 @@ export function isClaudeMaxTurnsResult(parsed: Record<string, unknown> | null | 
     reason === "turn_limit" ||
     reason === "turn_limit_exhausted",
   );
+
 }
 
 export function isClaudeUnknownSessionError(parsed: Record<string, unknown>): boolean {
