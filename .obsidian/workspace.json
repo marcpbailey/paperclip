@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "local/doc/PLAN PR_5074.md",
+                "file": "wiki/prompts/2026-05-31 became-inactive-wake-fix v1.sonnet-4.6.md",
                 "mode": "preview",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "PLAN PR_5074"
+              "title": "2026-05-31 became-inactive-wake-fix v1.sonnet-4.6"
             }
           }
         ]
@@ -41,7 +41,7 @@
               "type": "file-explorer",
               "state": {
                 "sortOrder": "alphabetical",
-                "autoReveal": false
+                "autoReveal": true
               },
               "icon": "lucide-folder-closed",
               "title": "Files"
@@ -53,7 +53,7 @@
             "state": {
               "type": "search",
               "state": {
-                "query": "",
+                "query": "review secu",
                 "matchingCase": false,
                 "explainSearch": false,
                 "collapseAll": false,
@@ -94,7 +94,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "local/doc/PLAN PR_5074.md",
+                "file": "wiki/prompts/2026-05-31 became-inactive-wake-fix v1.sonnet-4.6.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,7 +104,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for PLAN PR_5074"
+              "title": "Backlinks for 2026-05-31 became-inactive-wake-fix v1.sonnet-4.6"
             }
           },
           {
@@ -183,43 +183,53 @@
       "code-files:Create Code File": false
     }
   },
-  "active": "e8974e117047cac2",
+  "active": "680cc91727f83046",
   "lastOpenFiles": [
-    "local/doc/REVIEW - security-critique.md",
-    "local/doc/PLAN agent-backlog-wakeup-fix.md",
-    "local/doc/plans/ARCHIVE - 2026-05-30 claude-local-thinking-block-session-fix v1.sonnet-4.6.md",
+    "scripts/upstream-sync.sh",
+    "wiki/prompts/2026-06-01 rollcall-workspace-model-improvements v1.sonnet-4.6.md",
+    "wiki/prompts/2026-06-01 rollcall-model-column-debug v1.sonnet-4.6.md",
+    "wiki/prompts/2026-06-01 routine-model-profile-dispatch v1.sonnet-4.6.md",
+    "local/skills/agent-rollcall/info.md",
+    "local/bin/prepend-agents-include.sh",
+    "local/bin/link-agent-workspaces.sh",
+    "local/COMMON_AGENTS.md",
+    "local/doc/specs/SPEC became-inactive-wake-fix.md",
+    "wiki/wiki.md",
+    "wiki/assets/templates/markdownsubstitutions.txt",
+    "server/src/__tests__/recovery-origin-kind.test.ts",
+    "server/src/__tests__/agent-rollcall.test.ts",
+    "packages/mcp-server/tsup.config.ts",
+    "packages/adapters/openrouter-external/tsconfig.json",
+    "packages/adapters/openrouter-external/src/server/test.ts",
+    "packages/adapters/openrouter-external/src/server/index.ts",
+    "packages/adapters/openrouter-external/src/server/execute.ts",
+    "packages/adapters/openrouter-external/README.md",
+    "packages/adapters/openrouter-agent/TOOL-RESULT-ENCODING.md",
+    "packages/adapters/openrouter-agent/README.md",
+    "packages/adapters/openrouter-agent/Openrouter-agent adapter phase 3 design.md",
+    "packages/adapters/openrouter-agent/CHANGELOG.md",
+    "packages/adapters/openrouter-agent/ARCHITECTURE.md",
+    "local/skills/trace-issue-run/SKILL.md",
+    "local/skills/agent-rollcall/SKILL.md",
+    "local/doc/specs/SPEC crew-overlay-integration.md",
+    "local/doc/specs/SPEC agent-backlog-wakeup-fix.md",
+    "local/doc/specs/SPEC PR_7528 mcp-container-packaging-fix.md",
+    "local/doc/specs/SPEC PR_5074 custom adapter labels.md",
+    "local/doc/specs/REVIEW - security-critique.md",
+    "local/doc/plans/PROMPT openrouter-agent-extraction.md",
+    "local/doc/plans/PLAN - rollcall-probe-origin-kind.md",
     "local/doc/plans/PLAN - rollcall-probe-origin-kind-verification.md",
     "local/doc/plans/PLAN - openrouter-v2-features-phase1.md",
-    "local/doc/plans/PLAN - rollcall-probe-origin-kind.md",
-    "local/doc/plans/PLAN - openrouter-instruction-bundles.md",
-    "local/doc/plans/PLAN - agent-declarable-origin-kind.md",
-    "local/doc/plans/ARCHIVE - potential-api-via-curl-skill.md",
-    "local/_AGENTS.md",
-    "local/skills/agent-delegate/scripts/agent-update-issue.sh",
-    "local/bin/print_company_id.py",
-    "docker/local/skills/trace-issue-run",
-    "docker/local/skills/agent-rollcall",
-    "docker/local/skills/agent-delegate",
-    "docker/local/skills",
-    "docker/local",
-    "local/bin/__pycache__/paperclip-agentmodels.cpython-314.pyc",
-    "local/bin/__pycache__",
-    "local/bin/paperclip-agentmodels.py",
-    "AGENTS.md",
-    "local/wiki/templates/templates.md",
-    "local/wiki/untitled folder/untitled folder.md",
-    "local/wiki/templates/untitled folder.md",
-    "local/wiki/assets/assets.md",
-    "local/wiki/assets/untitled folder.md",
-    "local/wiki/wiki.md",
-    "local/untitled folder/untitled folder.md",
-    "local/wiki/untitled folder.md",
-    "local/doc/#review security-critique.md",
-    "local/doc/PLAN PR_5074.md",
-    "local/doc/plans/PROMPT openrouter-agent-extraction.md",
-    "local/doc/plans/PLAN - openrouter-local-adapter-spec.md",
-    "local/doc/plans/PLAN - agent-rollcall-skill-plan.md",
     "local/doc/plans/PLAN - openrouter-local-skill-sync-plan.md",
-    "local/doc/guides/PROMPT - agent-delegate skill.md"
+    "screenshots/PAP-9841-workspace-diff.png",
+    "docs/pr-screenshots/pr-6384/sidebar-desktop.png",
+    "docs/pr-screenshots/pr-6384/inbox-rows-desktop.png",
+    "docs/pr-screenshots/pr-6384/dev-restart-banner-mobile.png",
+    "docs/pr-screenshots/pr-6384/dev-restart-banner-desktop.png",
+    "docs/pr-screenshots/pr-5428/assigned-backlog-light.png",
+    "docs/pr-screenshots/pr-5428/assigned-backlog-dark.png",
+    "docs/pr-screenshots/pr-5356/issue-thread-notices-collapsed.png",
+    "docs/pr-screenshots/pr-5356/issue-thread-notices-expanded.png",
+    "docs/pr-screenshots/pr-5291/before-projects-workspaces.png"
   ]
 }
