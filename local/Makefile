@@ -1,13 +1,15 @@
 ADAPTER_SRC    := packages/adapters/openrouter-agent
-ADAPTER_DEPLOY := $(HOME)/Projects/linkcast/crew/paperclip/companies/linkcast/adapters/paperclip-openrouter-agent
 
-CREW_ROOT          := $(HOME)/Projects/linkcast/crew
+LINKCAST_ROOT      ?= $(HOME)/Projects/linkcast
+ADAPTER_DEPLOY     := $(LINKCAST_ROOT)/crew/paperclip/companies/linkcast/adapters/paperclip-openrouter-agent
+
+CREW_ROOT          := $(LINKCAST_ROOT)/crew
 AVENGERSTOWER_ROOT := $(CREW_ROOT)/paperclip/companies/linkcast/environments/avengerstower
 
 PROJECT       := paperclip-linkcast
 COMPOSE_FILES := -f docker/docker-compose.yml -f local/compose/paperclip-boot-linkcast.yaml
 
-.PHONY: all build-adapter sync-adapter build-container deploy-adapter deploy-container restart update test fulltest \
+.PHONY: all build-adapter sync-adapter build-container stamp-agents deploy-adapter deploy-container restart update test fulltest \
         _build-paperclip-base _build-avengerstower-base \
         build-avengerstower-browser build-avengerstower-media help
 
@@ -21,7 +23,10 @@ fulltest: ## Run the full pre-hand-off verification suite (Level 2 tests)
 
 all: build-container build-adapter sync-adapter restart test ## Full rebuild (container + adapter), sync, restart, and fast test
 
-build-container: _build-paperclip-base _build-avengerstower-base ## Rebuild server image (paperclip base → avengerstower/base layer)
+stamp-agents: ## Stamp preamble into all AGENTS.md files (delegates to linkcast meta-repo)
+	$(MAKE) -C $(LINKCAST_ROOT) stamp-agents
+
+build-container: stamp-agents _build-paperclip-base _build-avengerstower-base ## Rebuild server image (stamp agents → paperclip base → avengerstower/base layer)
 
 _build-paperclip-base: ## Build the upstream paperclip base image from source
 	docker build \
