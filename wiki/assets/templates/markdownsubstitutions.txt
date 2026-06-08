@@ -1,3 +1,0 @@
-Kubernetes>>>kubectl,container orchestration tool,k8s,kube
-Obsidian Plugin Dev>>>obsidian plugin development notes,plugin,obsidian-dev
-AGENTIC EXECUTION RULES	rrr	rrr
