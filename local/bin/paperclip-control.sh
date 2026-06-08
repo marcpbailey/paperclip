@@ -191,12 +191,18 @@ with_secrets() {
     op run --env-file=.env -- "${COMPOSE[@]}" "$@"
 }
 
+# Stub out .env variables in the current process.
+stub_environment() {
+  strip_dotenv_keys stub
+  export BETTER_AUTH_SECRET="stubbed_for_validation"
+  ensure_gh_token
+}
+
 # Run a compose subcommand that does NOT need real secret values.
 # strip_dotenv_keys in stub mode exports empty strings for every .env key,
 # which satisfies compose interpolation without leaking shell values.
 without_secrets() {
-  strip_dotenv_keys stub
-  ensure_gh_token
+  stub_environment
 
   # Whitelist for non-secret commands: HOME, PATH, and every key from .env
   # (which strip_dotenv_keys has already stubbed to empty strings).
@@ -504,8 +510,8 @@ case "${1:-}" in
   logs)     without_secrets logs -f "${@:2}" ;;
   env)      env_diagnostics ;;
   version)  show_versions ;;
-  test)     make -f local/Makefile test ;;
-  fulltest) make -f local/Makefile fulltest ;;
-  make)     make -f local/Makefile "${@:2}" ;;
+  test)     stub_environment; make -f local/Makefile test ;;
+  fulltest) stub_environment; make -f local/Makefile fulltest ;;
+  make)     stub_environment; make -f local/Makefile "${@:2}" ;;
   *)        usage ;;
 esac

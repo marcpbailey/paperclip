@@ -14,7 +14,6 @@ services:
 #      ANTHROPIC_DEFAULT_HAIKU_MODEL: "${ANTHROPIC_DEFAULT_HAIKU_MODEL:-}"
 #      ANTHROPIC_DEFAULT_OPUS_MODEL: "${ANTHROPIC_DEFAULT_OPUS_MODEL:-}"
     volumes:
-      - ../local/COMMON_AGENTS.md:/paperclip/AGENTS.md:ro
       - ../local/skills/agent-rollcall:/app/skills/agent-rollcall:ro
       - ../local/skills/trace-issue-run:/app/skills/trace-issue-run:ro
       - /var/run/docker.sock:/var/run/docker.sock
