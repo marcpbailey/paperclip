@@ -1,10 +1,15 @@
 ADAPTER_SRC    := packages/adapters/openrouter-agent
 ADAPTER_DEPLOY := $(HOME)/Projects/linkcast/crew/paperclip/companies/linkcast/adapters/paperclip-openrouter-agent
 
+CREW_ROOT          := $(HOME)/Projects/linkcast/crew
+AVENGERSTOWER_ROOT := $(CREW_ROOT)/paperclip/companies/linkcast/environments/avengerstower
+
 PROJECT       := paperclip-linkcast
 COMPOSE_FILES := -f docker/docker-compose.yml -f local/compose/paperclip-boot-linkcast.yaml
 
-.PHONY: all build-adapter sync-adapter build-container deploy-adapter deploy-container restart update test fulltest help
+.PHONY: all build-adapter sync-adapter build-container deploy-adapter deploy-container restart update test fulltest \
+        _build-paperclip-base _build-avengerstower-base \
+        build-avengerstower-browser build-avengerstower-media help
 
 test: ## Run the fast unit/integration test suite
 	pnpm vitest run packages/adapters/openrouter-agent packages/adapters/openrouter-external --passWithNoTests
@@ -16,11 +21,33 @@ fulltest: ## Run the full pre-hand-off verification suite (Level 2 tests)
 
 all: build-container build-adapter sync-adapter restart test ## Full rebuild (container + adapter), sync, restart, and fast test
 
-build-container: ## Rebuild the server Docker image (no cache for app source layers)
-	docker compose -p $(PROJECT) $(COMPOSE_FILES) build \
+build-container: _build-paperclip-base _build-avengerstower-base ## Rebuild server image (paperclip base → avengerstower/base layer)
+
+_build-paperclip-base: ## Build the upstream paperclip base image from source
+	docker build \
 	    --build-arg GIT_SHA=$$(git rev-parse --short HEAD) \
 	    --build-arg BUILD_DATE=$$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-	    server
+	    -t paperclip-local:latest \
+	    -f Dockerfile \
+	    .
+
+_build-avengerstower-base: ## Build the avengerstower/base layer on top of paperclip-local
+	docker build \
+	    --build-arg BASE_IMAGE=paperclip-local:latest \
+	    -t linkcast/avengerstower-base:latest \
+	    $(AVENGERSTOWER_ROOT)/base
+
+build-avengerstower-browser: ## Build the avengerstower/browser environment (playwright + chromium)
+	docker build \
+	    --build-arg BASE_IMAGE=linkcast/avengerstower-base:latest \
+	    -t linkcast/avengerstower-browser:latest \
+	    $(AVENGERSTOWER_ROOT)/browser
+
+build-avengerstower-media: ## Build the avengerstower/media environment (ffmpeg, vlc, mpv)
+	docker build \
+	    --build-arg BASE_IMAGE=linkcast/avengerstower-base:latest \
+	    -t linkcast/avengerstower-media:latest \
+	    $(AVENGERSTOWER_ROOT)/media
 
 build-adapter: ## Compile the openrouter-agent adapter (npm run build only)
 	cd $(ADAPTER_SRC) && npm run build
