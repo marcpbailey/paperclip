@@ -9,7 +9,7 @@ COMPOSE_FILES := -f docker/docker-compose.yml -f local/compose/paperclip-boot-li
 
 .PHONY: all build-adapter sync-adapter build-container stamp-agents deploy-adapter deploy-container restart update test fulltest \
         _build-paperclip-base _build-avengerstower-base \
-        build-avengerstower-browser build-avengerstower-media help
+        build-avengerstower-browser build-avengerstower-media build-avengerstower-build help
 
 test: ## Run the fast unit/integration test suite
 	pnpm vitest run packages/adapters/openrouter-agent packages/adapters/openrouter-external --passWithNoTests
@@ -43,6 +43,7 @@ _build-avengerstower-base: ## Build the avengerstower/base layer on top of paper
 build-avengerstower-browser: ## Build the avengerstower/browser environment (playwright + chromium)
 	docker build \
 	    --build-arg BASE_IMAGE=linkcast/avengerstower-base:latest \
+	    --build-arg PLAYWRIGHT_VERSION=v$$(grep "^  '@playwright/test@" pnpm-lock.yaml | head -1 | sed "s/.*test@\(.*\)':/\1/") \
 	    -t linkcast/avengerstower-browser:latest \
 	    $(AVENGERSTOWER)/browser
 
@@ -51,6 +52,12 @@ build-avengerstower-media: ## Build the avengerstower/media environment (ffmpeg,
 	    --build-arg BASE_IMAGE=linkcast/avengerstower-base:latest \
 	    -t linkcast/avengerstower-media:latest \
 	    $(AVENGERSTOWER)/media
+
+build-avengerstower-build: ## Build the avengerstower/build environment (C/C++ toolchain only)
+	docker build \
+	    --build-arg BASE_IMAGE=linkcast/avengerstower-base:latest \
+	    -t linkcast/avengerstower-build:latest \
+	    $(AVENGERSTOWER)/build
 
 build-adapter: ## Compile the openrouter-agent adapter (npm run build only)
 	cd $(ADAPTER_SRC) && npm run build
