@@ -1912,6 +1912,20 @@ export function companySkillService(db: Db) {
     return [];
   }
 
+  async function ensureDynamicSkillRoots(companyId: string) {
+    const roots = (process.env.PAPERCLIP_DYNAMIC_SKILLS_ROOT ?? "")
+      .split(":")
+      .map((p) => p.trim())
+      .filter(Boolean);
+    for (const root of roots) {
+      const stats = await fs.stat(root).catch(() => null);
+      if (!stats?.isDirectory()) continue;
+      const skills = await readLocalSkillImports(companyId, root)
+        .catch(() => [] as ImportedSkill[]);
+      if (skills.length > 0) await upsertImportedSkills(companyId, skills);
+    }
+  }
+
   async function reconcileLocalPathSkillSources(companyId: string) {
     const rows = await db
       .select({
@@ -1986,6 +2000,7 @@ export function companySkillService(db: Db) {
         throw notFound("Company not found");
       }
       await ensureBundledSkills(companyId);
+      await ensureDynamicSkillRoots(companyId);
       await reconcileLocalPathSkillSources(companyId);
     })();
 
