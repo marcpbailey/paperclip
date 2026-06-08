@@ -1,10 +1,8 @@
 ADAPTER_SRC    := packages/adapters/openrouter-agent
 
-LINKCAST_ROOT      ?= $(HOME)/Projects/linkcast
-ADAPTER_DEPLOY     := $(LINKCAST_ROOT)/crew/paperclip/companies/linkcast/adapters/paperclip-openrouter-agent
-
-CREW_ROOT          := $(LINKCAST_ROOT)/crew
-AVENGERSTOWER_ROOT := $(CREW_ROOT)/paperclip/companies/linkcast/environments/avengerstower
+LINKCAST_ROOT  ?= $(HOME)/Projects/linkcast
+ADAPTER_DEPLOY := $(LINKCAST_ROOT)/crew/paperclip/companies/linkcast/adapters/paperclip-openrouter-agent
+AVENGERSTOWER  := $(LINKCAST_ROOT)/crew/paperclip/companies/linkcast/environments/avengerstower
 
 PROJECT       := paperclip-linkcast
 COMPOSE_FILES := -f docker/docker-compose.yml -f local/compose/paperclip-boot-linkcast.yaml
@@ -40,19 +38,19 @@ _build-avengerstower-base: ## Build the avengerstower/base layer on top of paper
 	docker build \
 	    --build-arg BASE_IMAGE=paperclip-local:latest \
 	    -t linkcast/avengerstower-base:latest \
-	    $(AVENGERSTOWER_ROOT)/base
+	    $(AVENGERSTOWER)/base
 
 build-avengerstower-browser: ## Build the avengerstower/browser environment (playwright + chromium)
 	docker build \
 	    --build-arg BASE_IMAGE=linkcast/avengerstower-base:latest \
 	    -t linkcast/avengerstower-browser:latest \
-	    $(AVENGERSTOWER_ROOT)/browser
+	    $(AVENGERSTOWER)/browser
 
 build-avengerstower-media: ## Build the avengerstower/media environment (ffmpeg, vlc, mpv)
 	docker build \
 	    --build-arg BASE_IMAGE=linkcast/avengerstower-base:latest \
 	    -t linkcast/avengerstower-media:latest \
-	    $(AVENGERSTOWER_ROOT)/media
+	    $(AVENGERSTOWER)/media
 
 build-adapter: ## Compile the openrouter-agent adapter (npm run build only)
 	cd $(ADAPTER_SRC) && npm run build
