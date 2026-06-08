@@ -1,5 +1,6 @@
 services:
   server:
+    container_name: paperclip-avengerstower-app
     environment:
       HOST: "0.0.0.0"
       PAPERCLIP_DEPLOYMENT_MODE: "authenticated"
@@ -17,6 +18,9 @@ services:
       - ../local/skills/agent-rollcall:/app/skills/agent-rollcall:ro
       - ../local/skills/trace-issue-run:/app/skills/trace-issue-run:ro
       - /var/run/docker.sock:/var/run/docker.sock
+
+  db:
+    container_name: paperclip-avengerstower-db
 
 volumes:
   paperclip-data:
