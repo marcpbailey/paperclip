@@ -3,7 +3,7 @@ FROM node:lts-trixie-slim AS base
 ARG USER_UID=1000
 ARG USER_GID=1000
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates gosu curl gh git wget ripgrep python3 \
+  && apt-get install -y --no-install-recommends ca-certificates gosu curl gh git wget ripgrep python3 gnupg \
   && rm -rf /var/lib/apt/lists/* \
   && corepack enable
 
@@ -65,6 +65,30 @@ RUN npm install --global --omit=dev @anthropic-ai/claude-code@latest @openai/cod
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /paperclip \
   && chown node:node /paperclip
+
+# Docker CE CLI (DooD), multimedia tools, and build toolchain
+RUN install -m 0755 -d /etc/apt/keyrings \
+  && curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \
+  && chmod a+r /etc/apt/keyrings/docker.gpg \
+  && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable" \
+     > /etc/apt/sources.list.d/docker.list \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends \
+     docker-ce-cli \
+     docker-compose-plugin \
+     build-essential \
+     ffmpeg \
+     vlc-bin \
+     vlc-plugin-base \
+     mpv \
+  && groupadd -r docker \
+  && usermod -aG docker node \
+  && rm -rf /var/lib/apt/lists/*
+
+# Playwright browsers baked in at build time (avoids runtime download + OrbStack oop-worker hang)
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN cd /app && pnpm exec playwright install --with-deps chromium \
+  && chmod -R a+rx /ms-playwright
 
 COPY scripts/docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
