@@ -2,6 +2,18 @@
 
 Local overrides and security requirements for the LinkCast environment.
 
+
+## Agent Behavioral Rules
+
+**1. No Autonomous Speculative Coding**
+If the user asks a speculative question or asks for options (e.g., "what is a good approach?", "how would we fix this?"), you MUST ONLY answer the question or propose the options. Do NOT assume you should proceed with implementing the answer. Discuss the design and wait for the user to explicitly confirm the approach (e.g., "make it so", "go ahead") before making any code changes.
+
+**2. No Raw Docker Compose / Container Commands**
+NEVER run `docker compose` or raw container lifecycle commands directly. All container operations (build, deploy, start, stop, restart, teardown, status) MUST be managed exclusively through `local/bin/paperclip-control.sh` (often aliased as `pcc`). This script safely handles environment variable stubs and secret injection that raw Docker Compose commands will fail on or corrupt.
+
+**3. Explicit Permission for Container Changes**
+Agents MUST NOT execute `paperclip-control.sh` (or `make` targets that invoke it) autonomously. You must ALWAYS ask the user for explicit permission and wait for their approval before running any script that alters the container lifecycle.
+
 ## Source Discipline
 
 This repo follows the **Integration Manager Workflow** (see [Pro Git §5.1][pro-git]) with
@@ -15,9 +27,9 @@ This repo follows the **Integration Manager Workflow** (see [Pro Git §5.1][pro-
 |--------|------|------|
 | `origin` | `paperclipai/paperclip` | Upstream master — no push access |
 | `fork` | `marcpbailey/paperclip` | PR staging fork — push feature branches here |
-| `paperclip` | `LinkCast/paperclip` | Remote backup of local `main` |
+| `paperclip` | `LinkCast/paperclip` | Primary repo and remote backup of local `main` |
 
-Local branch `main` is the running deployment. It tracks upstream via periodic merges from
+Local ~/Projects/paperclip/ branch `main` is the running deployment. It tracks upstream via periodic merges from
 `origin` and includes downstream patches (cherry-picks) from pending fork PR branches.
 
 ### File ownership
@@ -44,6 +56,17 @@ pcc make update VERSION=v2026.529.0  # non-interactive: merge a specific tag
 `fork` is a PR staging area, not a sync relay — there is no need to route through it. If a
 pending cherry-pick on `main` was merged upstream in the same sync, Git's patch-id detection
 will skip it cleanly.
+
+### Git workflow flow for changes
+
+```
+working copy   (local working copy)
+    → branch + PR → linkcast/paperclip        (company fork, reviewed by operator)
+    → merge
+    → git fetch paperclip && git merge paperclip/main  →  ~/Projects/paperclip
+```
+
+For upstream platform updates (`paperclipai/paperclip` → `linkcast/paperclip`), a scheduled Paperclip routine (LINAA-1017) syncs new releases automatically and opens a PR for operator review.
 
 ### Workflow for upstream-owned files (Integration Manager path)
 
@@ -77,14 +100,13 @@ Is the file on origin/master?
   YES  → Integration Manager path (fork branch + cherry-pick). Never edit on main first.
   NO   → Is the file under local/ or confirmed local-only?
            YES → Commit directly to main, push to paperclip remote.
-           NO  → Stop. Clarify with Marc before proceeding.
+           NO  → Stop. Clarify with user before proceeding.
 ```
 
 ### Hard rules
 
 - Never push to `origin` (no push access; will fail or create conflicts).
 - Never edit upstream-owned files on `main` without a corresponding fork branch.
-- Never run `gh` CLI from an agent — write the command for Marc to run instead.
 - Always push to `paperclip` remote after local-only changes are tested.
 
 ---

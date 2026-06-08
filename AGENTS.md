@@ -1,6 +1,11 @@
+@local/_AGENTS.md
+
 # AGENTS.md
 
 Guidance for human and AI contributors working in this repository.
+> [!IMPORTANT]
+> **LOCAL OVERRIDES:** These instructions come from upstream. Before executing any commands or making any changes, you MUST read and assimilate the rules in `local/_AGENTS.md`.
+
 
 ## 1. Purpose
 
